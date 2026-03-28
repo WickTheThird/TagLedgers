@@ -1,13 +1,8 @@
 // TagLedger Cloudflare Worker - API Backend
-// Deploy: wrangler deploy
-// Env vars needed: GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, GOOGLE_REDIRECT_URI,
-//   GOOGLE_SERVICE_ACCOUNT_KEY, DRIVE_FOLDER_IDS, DB_LEDGER_SHEET_ID, ALLOWED_EMAILS,
-//   FRONTEND_URL, SESSION_SECRET
-
 const CORS_HEADERS = {
 	'Access-Control-Allow-Credentials': 'true',
 	'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-	'Access-Control-Allow-Headers': 'Content-Type',
+	'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
 function corsHeaders(env) {
@@ -43,20 +38,15 @@ async function decryptSession(cookie, secret) {
 	} catch { return null; }
 }
 
-function getSessionFromCookie(request) {
+function getSessionToken(request) {
+	// Check Authorization header first, then cookie fallback
+	const authHeader = request.headers.get('Authorization') || '';
+	if (authHeader.startsWith('Bearer ')) {
+		return authHeader.slice(7);
+	}
 	const cookies = request.headers.get('Cookie') || '';
 	const match = cookies.match(/tagledger_session=([^;]+)/);
 	return match ? match[1] : null;
-}
-
-function setSessionCookie(value, env) {
-	const domain = new URL(env.FRONTEND_URL || 'https://tagledgers.com').hostname;
-	return `tagledger_session=${value}; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=${60*60*24*30}; Domain=${domain}`;
-}
-
-function clearSessionCookie(env) {
-	const domain = new URL(env.FRONTEND_URL || 'https://tagledgers.com').hostname;
-	return `tagledger_session=; Path=/; HttpOnly; Secure; SameSite=None; Max-Age=0; Domain=${domain}`;
 }
 
 // --- Google Service Account JWT ---
@@ -95,6 +85,7 @@ async function getServiceToken(env) {
 
 // --- Route Handlers ---
 async function handleAuthGoogle(env) {
+	console.log('AUTH GOOGLE: redirect_uri =', env.GOOGLE_REDIRECT_URI);
 	const params = new URLSearchParams({
 		client_id: env.GOOGLE_CLIENT_ID, redirect_uri: env.GOOGLE_REDIRECT_URI,
 		response_type: 'code', scope: 'openid email profile https://www.googleapis.com/auth/drive.file',
@@ -106,10 +97,18 @@ async function handleAuthGoogle(env) {
 async function handleAuthCallback(request, env) {
 	const url = new URL(request.url);
 	const code = url.searchParams.get('code');
+	const error = url.searchParams.get('error');
+	console.log('AUTH CALLBACK: code =', code ? 'yes' : 'no', 'error =', error || 'none');
+
+	if (error) {
+		console.error('Google returned error:', error);
+		return Response.redirect(`${env.FRONTEND_URL}/login?error=auth_failed&detail=${error}`, 302);
+	}
 	if (!code) return Response.redirect(`${env.FRONTEND_URL}/login?error=no_code`, 302);
 
 	try {
-		// Exchange code for tokens
+		console.log('Exchanging code for tokens...');
+		console.log('redirect_uri =', env.GOOGLE_REDIRECT_URI);
 		const tokenRes = await fetch('https://oauth2.googleapis.com/token', {
 			method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
 			body: new URLSearchParams({
@@ -118,41 +117,47 @@ async function handleAuthCallback(request, env) {
 			})
 		});
 		const tokens = await tokenRes.json();
-		if (!tokens.access_token) return Response.redirect(`${env.FRONTEND_URL}/login?error=auth_failed`, 302);
+		console.log('Token response status:', tokenRes.status);
+		if (!tokens.access_token) {
+			console.error('Token exchange failed:', JSON.stringify(tokens));
+			return Response.redirect(`${env.FRONTEND_URL}/login?error=auth_failed`, 302);
+		}
+		console.log('Got access token, fetching user info...');
 
-		// Get user info
 		const userRes = await fetch('https://www.googleapis.com/oauth2/v2/userinfo', {
 			headers: { Authorization: `Bearer ${tokens.access_token}` }
 		});
 		const user = await userRes.json();
+		console.log('User:', user.email);
 
-		// Check allowlist
 		const allowed = (env.ALLOWED_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
 		if (allowed.length && !allowed.includes(user.email.toLowerCase())) {
+			console.log('User not in allowlist:', user.email);
 			return Response.redirect(`${env.FRONTEND_URL}/login?error=not_allowed`, 302);
 		}
 
-		// Create session
 		const session = await encryptSession({
 			accessToken: tokens.access_token, refreshToken: tokens.refresh_token || '',
 			email: user.email, name: user.name, picture: user.picture,
 			expiresAt: Date.now() + tokens.expires_in * 1000
 		}, env.SESSION_SECRET);
 
+		console.log('Auth success, redirecting to', env.FRONTEND_URL);
+		// Pass token via URL fragment (not query param, so it's not logged by servers)
 		return new Response(null, {
 			status: 302, headers: {
-				Location: env.FRONTEND_URL || '/',
-				'Set-Cookie': setSessionCookie(session, env),
+				Location: `${env.FRONTEND_URL}/?token=${encodeURIComponent(session)}`,
 				...corsHeaders(env)
 			}
 		});
 	} catch (e) {
+		console.error('Auth callback exception:', e.message || e);
 		return Response.redirect(`${env.FRONTEND_URL}/login?error=auth_failed`, 302);
 	}
 }
 
 async function handleAuthMe(request, env) {
-	const cookie = getSessionFromCookie(request);
+	const cookie = getSessionToken(request);
 	if (!cookie) return jsonResponse({ user: null }, 200, env);
 	const session = await decryptSession(cookie, env.SESSION_SECRET);
 	if (!session) return jsonResponse({ user: null }, 200, env);
@@ -163,14 +168,13 @@ async function handleAuthLogout(env) {
 	return new Response(null, {
 		status: 302, headers: {
 			Location: `${env.FRONTEND_URL}/login`,
-			'Set-Cookie': clearSessionCookie(env),
 			...corsHeaders(env)
 		}
 	});
 }
 
 async function handleDriveFiles(request, env) {
-	const cookie = getSessionFromCookie(request);
+	const cookie = getSessionToken(request);
 	if (!cookie) return jsonResponse({ error: 'Not authenticated' }, 401, env);
 	const session = await decryptSession(cookie, env.SESSION_SECRET);
 	if (!session) return jsonResponse({ error: 'Not authenticated' }, 401, env);
@@ -193,7 +197,7 @@ async function handleDriveFiles(request, env) {
 }
 
 async function handleDriveDownload(fileId, request, env) {
-	const cookie = getSessionFromCookie(request);
+	const cookie = getSessionToken(request);
 	if (!cookie) return new Response('Not authenticated', { status: 401, headers: corsHeaders(env) });
 	const session = await decryptSession(cookie, env.SESSION_SECRET);
 	if (!session) return new Response('Not authenticated', { status: 401, headers: corsHeaders(env) });
@@ -207,14 +211,14 @@ async function handleDriveDownload(fileId, request, env) {
 }
 
 async function handleDriveFolders(request, env) {
-	const cookie = getSessionFromCookie(request);
+	const cookie = getSessionToken(request);
 	if (!cookie) return jsonResponse({ error: 'Not authenticated' }, 401, env);
 	const folderIds = (env.DRIVE_FOLDER_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
 	return jsonResponse({ bankFolder: folderIds[0] || '', dbFolder: folderIds[1] || '' }, 200, env);
 }
 
 async function handleDriveUpload(request, env) {
-	const cookie = getSessionFromCookie(request);
+	const cookie = getSessionToken(request);
 	if (!cookie) return jsonResponse({ error: 'Not authenticated' }, 401, env);
 	const session = await decryptSession(cookie, env.SESSION_SECRET);
 	if (!session) return jsonResponse({ error: 'Not authenticated' }, 401, env);
@@ -227,7 +231,6 @@ async function handleDriveUpload(request, env) {
 	const buffer = await file.arrayBuffer();
 	const mimeType = file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-	// Use user's token for upload (service accounts can't own files)
 	const initRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true', {
 		method: 'POST', headers: {
 			Authorization: `Bearer ${session.accessToken}`, 'Content-Type': 'application/json',
@@ -248,7 +251,7 @@ async function handleDriveUpload(request, env) {
 }
 
 async function handleLedgerGet(request, env) {
-	const cookie = getSessionFromCookie(request);
+	const cookie = getSessionToken(request);
 	if (!cookie) return jsonResponse({ error: 'Not authenticated' }, 401, env);
 
 	const sheetId = env.DB_LEDGER_SHEET_ID;
@@ -272,7 +275,7 @@ async function handleLedgerGet(request, env) {
 }
 
 async function handleLedgerPost(request, env) {
-	const cookie = getSessionFromCookie(request);
+	const cookie = getSessionToken(request);
 	if (!cookie) return jsonResponse({ error: 'Not authenticated' }, 401, env);
 	const session = await decryptSession(cookie, env.SESSION_SECRET);
 	if (!session) return jsonResponse({ error: 'Not authenticated' }, 401, env);
@@ -283,7 +286,6 @@ async function handleLedgerPost(request, env) {
 	const entry = await request.json();
 	const token = await getServiceToken(env);
 
-	// Check for duplicate
 	const checkRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A:D`, {
 		headers: { Authorization: `Bearer ${token}` }
 	});
@@ -317,7 +319,6 @@ export default {
 		const url = new URL(request.url);
 		const path = url.pathname;
 
-		// CORS preflight
 		if (request.method === 'OPTIONS') {
 			return new Response(null, { headers: corsHeaders(env) });
 		}
@@ -333,13 +334,12 @@ export default {
 			if (path === '/api/ledger' && request.method === 'GET') return await handleLedgerGet(request, env);
 			if (path === '/api/ledger' && request.method === 'POST') return await handleLedgerPost(request, env);
 
-			// Drive download: /api/drive/download/{fileId}
 			const downloadMatch = path.match(/^\/api\/drive\/download\/(.+)$/);
 			if (downloadMatch) return await handleDriveDownload(downloadMatch[1], request, env);
 
 			return new Response('Not found', { status: 404, headers: corsHeaders(env) });
 		} catch (e) {
-			console.error('Worker error:', e);
+			console.error('Worker error:', e.message || e);
 			return jsonResponse({ error: 'Internal error' }, 500, env);
 		}
 	}

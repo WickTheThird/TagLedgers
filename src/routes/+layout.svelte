@@ -1,27 +1,48 @@
 <script lang="ts">
 	import '../app.css';
 	import { onMount } from 'svelte';
-	import { apiFetch, apiUrl } from '$lib/api';
+	import { apiFetch, apiUrl, getSessionToken, setSessionToken, clearSessionToken } from '$lib/api';
 	import { writable } from 'svelte/store';
+	import { goto } from '$app/navigation';
 
 	let { children } = $props();
 
-	// Global user state
 	const user = writable<{ email: string; name: string; picture: string } | null>(null);
 	let initialized = $state(false);
 
+	function handleLogout() {
+		clearSessionToken();
+		user.set(null);
+		goto('/login');
+	}
+
 	onMount(async () => {
-		try {
-			const res = await apiFetch('/api/auth/me');
-			if (res.ok) {
-				const data = await res.json();
-				user.set(data.user);
+		// Check URL for token from auth callback
+		const params = new URLSearchParams(window.location.search);
+		const token = params.get('token');
+		if (token) {
+			setSessionToken(token);
+			// Clean URL
+			window.history.replaceState({}, '', window.location.pathname);
+		}
+
+		// Check if we have a valid session
+		if (getSessionToken()) {
+			try {
+				const res = await apiFetch('/api/auth/me');
+				if (res.ok) {
+					const data = await res.json();
+					user.set(data.user);
+				} else {
+					clearSessionToken();
+				}
+			} catch {
+				clearSessionToken();
 			}
-		} catch {}
+		}
 		initialized = true;
 	});
 
-	// Export user store globally
 	import { setContext } from 'svelte';
 	setContext('user', user);
 </script>
@@ -41,7 +62,7 @@
 				{#if $user.picture}
 					<img src={$user.picture} alt="" class="w-7 h-7 rounded-full" referrerpolicy="no-referrer" />
 				{/if}
-				<a href={apiUrl('/api/auth/logout')} class="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">Logout</a>
+				<button onclick={handleLogout} class="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">Logout</button>
 			</div>
 		</header>
 	{/if}
