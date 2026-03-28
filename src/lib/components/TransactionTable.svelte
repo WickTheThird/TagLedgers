@@ -2,7 +2,7 @@
 	import { filteredTransactions, availableTags, updateTransactionTag, addTransaction, deleteTransaction, fileSheetMap } from '$lib/stores/transactions';
 	import { apiFetch } from '$lib/api';
 	import type { Transaction } from '$lib/types';
-	import { displayCurrency, getCurrencySymbol } from '$lib/stores/currency';
+	import { displayCurrency, getCurrencySymbol, exchangeRates, convertAmount } from '$lib/stores/currency';
 	import * as XLSX from 'xlsx';
 
 	let sortCol = $state<keyof Transaction>('date');
@@ -85,9 +85,10 @@
 		return d.toLocaleDateString('en-IE', { year: 'numeric', month: '2-digit', day: '2-digit' });
 	}
 
-	function formatAmount(n: number | null) {
+	function formatAmount(n: number | null, fromCurrency?: string) {
 		if (n == null) return '';
-		return n.toLocaleString('en-IE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		const converted = fromCurrency ? convertAmount(n, fromCurrency, $displayCurrency, $exchangeRates) : n;
+		return converted.toLocaleString('en-IE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 	}
 
 	function handleTagChange(txId: string, newTag: string) {
@@ -388,9 +389,9 @@
 							</button>
 						{/if}
 					</td>
-					<td class="px-3 py-1.5 text-right text-[var(--red)] font-mono">{formatAmount(tx.debit)}</td>
-					<td class="px-3 py-1.5 text-right text-[var(--green)] font-mono">{formatAmount(tx.credit)}</td>
-					<td class="px-3 py-1.5 text-right font-mono text-[var(--text-secondary)] hidden sm:table-cell">{formatAmount(tx.balance)}</td>
+					<td class="px-3 py-1.5 text-right text-[var(--red)] font-mono">{formatAmount(tx.debit, tx.currency)}</td>
+					<td class="px-3 py-1.5 text-right text-[var(--green)] font-mono">{formatAmount(tx.credit, tx.currency)}</td>
+					<td class="px-3 py-1.5 text-right font-mono text-[var(--text-secondary)] hidden sm:table-cell">{formatAmount(tx.balance, tx.currency)}</td>
 					<td class="px-3 py-1.5 text-xs text-[var(--text-muted)] hidden sm:table-cell">{tx.account}</td>
 				</tr>
 			{/each}
