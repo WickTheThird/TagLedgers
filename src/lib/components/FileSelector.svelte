@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { transactions, loadedFiles } from '$lib/stores/transactions';
+	import { transactions, loadedFiles, loadedFileMeta } from '$lib/stores/transactions';
 	import { parseExcelBuffer } from '$lib/parser';
 	import { apiFetch } from '$lib/api';
 
@@ -54,6 +54,7 @@
 			const parsed = parseExcelBuffer(buffer, file.name);
 			$transactions = [...$transactions, ...parsed];
 			$loadedFiles = [...$loadedFiles, file.id];
+			$loadedFileMeta = [...$loadedFileMeta, { driveId: file.id, name: file.name }];
 			loaded = [...loaded, { id: file.id, name: file.name, transactionCount: parsed.length, source: 'drive' }];
 		} catch (e) {
 			error = `Failed to load ${file.name}`;
@@ -152,6 +153,7 @@
 			} catch { /* Ledger update failed silently */ }
 
 			$loadedFiles = [...$loadedFiles, driveFileId];
+			$loadedFileMeta = [...$loadedFileMeta, { driveId: driveFileId, name: file.name }];
 			loaded = [...loaded, { id: driveFileId, name: file.name, transactionCount: parsed.length, source: 'local' }];
 			uploading = false;
 		}
@@ -161,17 +163,16 @@
 	}
 
 	function unloadFile(fileInfo: LoadedFileInfo) {
-		$transactions = $transactions.filter(t => {
-			if (fileInfo.source === 'drive') return t.fileName !== fileInfo.name;
-			return t.fileName !== fileInfo.name;
-		});
+		$transactions = $transactions.filter(t => t.fileName !== fileInfo.name);
 		$loadedFiles = $loadedFiles.filter(id => id !== fileInfo.id);
+		$loadedFileMeta = $loadedFileMeta.filter(m => m.driveId !== fileInfo.id);
 		loaded = loaded.filter(l => l.id !== fileInfo.id);
 	}
 
 	function clearAll() {
 		$transactions = [];
 		$loadedFiles = [];
+		$loadedFileMeta = [];
 		loaded = [];
 	}
 

@@ -1,11 +1,16 @@
 <script lang="ts">
-	import { filteredTransactions, availableTags, updateTransactionTag, addTransaction, deleteTransaction } from '$lib/stores/transactions';
+	import { filteredTransactions, availableTags, updateTransactionTag, addTransaction, deleteTransaction, fileSheetMap } from '$lib/stores/transactions';
+	import { apiFetch } from '$lib/api';
 	import type { Transaction } from '$lib/types';
+	import * as XLSX from 'xlsx';
 
 	let sortCol = $state<keyof Transaction>('date');
 	let sortDir = $state<'asc' | 'desc'>('desc');
 	let editingTagId = $state<string | null>(null);
 	let showAddForm = $state(false);
+	let saving = $state(false);
+	let saveError = $state('');
+	let saveSuccess = $state('');
 
 	// New entry form
 	let newDate = $state(new Date().toISOString().slice(0, 10));
@@ -16,6 +21,41 @@
 	let newTag = $state('UNTAGGED');
 	let newAccount = $state('');
 	let newNotes = $state('');
+	let newFileName = $state('');
+	let newSheet = $state('');
+
+	// File/sheet options derived from loaded files
+	let fileOptions = $derived(() => {
+		const map = $fileSheetMap;
+		return [...map.entries()].map(([name, info]) => ({
+			name,
+			driveId: info.driveId,
+			sheets: info.sheets
+		}));
+	});
+
+	let sheetOptions = $derived(() => {
+		if (!newFileName) return [];
+		const map = $fileSheetMap;
+		const info = map.get(newFileName);
+		return info ? info.sheets : [];
+	});
+
+	// Auto-select first sheet when file changes
+	$effect(() => {
+		const sheets = sheetOptions();
+		if (sheets.length > 0 && !sheets.includes(newSheet)) {
+			newSheet = sheets[0];
+		}
+	});
+
+	// Auto-fill account from selected sheet
+	$effect(() => {
+		if (newSheet) {
+			const match = newSheet.match(/^\d{4}\s+(.+)$/);
+			if (match) newAccount = match[1].trim();
+		}
+	});
 
 	let sorted = $derived(() => {
 		const data = [...$filteredTransactions];
@@ -54,7 +94,13 @@
 		editingTagId = null;
 	}
 
-	function handleAddEntry() {
+	async function handleAddEntry() {
+		if (!newDesc || !newFileName || !newSheet) return;
+
+		saving = true;
+		saveError = '';
+		saveSuccess = '';
+
 		const date = new Date(newDate);
 		const debit = newDebit ? parseFloat(newDebit) : null;
 		const credit = newCredit ? parseFloat(newCredit) : null;
@@ -72,23 +118,126 @@
 			type,
 			tag: newTag,
 			notes: newNotes,
-			sourceSheet: 'Manual Entry',
+			sourceSheet: newSheet,
 			account: newAccount || 'MANUAL',
 			year: date.getFullYear(),
-			fileName: 'manual'
+			fileName: newFileName
 		};
 
-		addTransaction(tx);
-		// Reset form
-		newDate = new Date().toISOString().slice(0, 10);
-		newDesc = '';
-		newDesc2 = '';
-		newDebit = '';
-		newCredit = '';
-		newTag = 'UNTAGGED';
-		newAccount = '';
-		newNotes = '';
-		showAddForm = false;
+		try {
+			// Get the Drive file ID
+			const map = $fileSheetMap;
+			const fileInfo = map.get(newFileName);
+			if (!fileInfo) throw new Error('File not found in loaded files');
+
+			// 1. Download the file from Drive
+			const downloadRes = await apiFetch(`/api/drive/download/${fileInfo.driveId}`);
+			if (!downloadRes.ok) throw new Error('Failed to download file');
+			const buffer = await downloadRes.arrayBuffer();
+
+			// 2. Parse with SheetJS
+			const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
+			const sheet = workbook.Sheets[newSheet];
+			if (!sheet) throw new Error(`Sheet "${newSheet}" not found`);
+
+			// 3. Find the header row and column mapping
+			const rows: unknown[][] = XLSX.utils.sheet_to_json(sheet, { header: 1, raw: true });
+			let headerMapping: Record<string, number> = {};
+			let headerRow = -1;
+
+			for (let r = 0; r < Math.min(5, rows.length); r++) {
+				const row = rows[r];
+				if (!row) continue;
+				for (let c = 0; c < row.length; c++) {
+					const cell = String(row[c] ?? '').trim().toLowerCase();
+					if (cell.includes('date')) headerMapping['date'] = c;
+					if (cell.includes('description') && !cell.includes('2')) headerMapping['description'] = c;
+					if (cell.includes('description') && cell.includes('2')) headerMapping['description2'] = c;
+					if (cell.includes('debit')) headerMapping['debit'] = c;
+					if (cell.includes('credit')) headerMapping['credit'] = c;
+					if (cell.includes('balance')) headerMapping['balance'] = c;
+					if (cell.includes('type') || cell.includes('transaction')) headerMapping['type'] = c;
+					if (cell.includes('tag') || cell.includes('column 1') || cell.includes('category') || cell.includes('classification')) headerMapping['tag'] = c;
+					if (cell.includes('notes') || cell.includes('column 2')) headerMapping['notes'] = c;
+				}
+				if (Object.keys(headerMapping).length >= 3) {
+					headerRow = r;
+					break;
+				}
+				headerMapping = {};
+			}
+
+			if (headerRow < 0) throw new Error('Could not detect headers in sheet');
+
+			// 4. Build the new row in the same column order
+			const maxCol = Math.max(...Object.values(headerMapping), 0) + 1;
+			const newRow: unknown[] = new Array(maxCol).fill('');
+
+			if ('date' in headerMapping) newRow[headerMapping['date']] = date;
+			if ('description' in headerMapping) newRow[headerMapping['description']] = newDesc;
+			if ('description2' in headerMapping) newRow[headerMapping['description2']] = newDesc2;
+			if ('debit' in headerMapping) newRow[headerMapping['debit']] = debit ?? '';
+			if ('credit' in headerMapping) newRow[headerMapping['credit']] = credit ?? '';
+			if ('type' in headerMapping) newRow[headerMapping['type']] = type;
+			if ('tag' in headerMapping) newRow[headerMapping['tag']] = newTag;
+			if ('notes' in headerMapping) newRow[headerMapping['notes']] = newNotes;
+
+			// 5. Append the row to the sheet
+			const ref = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
+			const newRowNum = ref.e.r + 1;
+			for (let c = 0; c < newRow.length; c++) {
+				const val = newRow[c];
+				if (val === '' || val == null) continue;
+				const cellAddr = XLSX.utils.encode_cell({ r: newRowNum, c });
+				if (val instanceof Date) {
+					sheet[cellAddr] = { t: 'd', v: val };
+				} else if (typeof val === 'number') {
+					sheet[cellAddr] = { t: 'n', v: val };
+				} else {
+					sheet[cellAddr] = { t: 's', v: String(val) };
+				}
+			}
+			// Update sheet range
+			ref.e.r = newRowNum;
+			sheet['!ref'] = XLSX.utils.encode_range(ref);
+
+			// 6. Write back to buffer
+			const updatedBuffer = XLSX.write(workbook, { type: 'array', bookType: 'xlsx' });
+
+			// 7. Upload to Drive (replace existing file)
+			const formData = new FormData();
+			const blob = new Blob([updatedBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+			formData.append('file', blob, newFileName);
+
+			const updateRes = await apiFetch(`/api/drive/update/${fileInfo.driveId}`, {
+				method: 'PUT',
+				body: formData
+			});
+
+			if (!updateRes.ok) throw new Error('Failed to update file on Drive');
+
+			// 8. Add to in-memory store
+			addTransaction(tx);
+			saveSuccess = 'Entry saved to Drive!';
+
+			// Reset form
+			newDate = new Date().toISOString().slice(0, 10);
+			newDesc = '';
+			newDesc2 = '';
+			newDebit = '';
+			newCredit = '';
+			newTag = 'UNTAGGED';
+			newNotes = '';
+
+			setTimeout(() => { saveSuccess = ''; }, 3000);
+		} catch (e: any) {
+			saveError = e.message || 'Failed to save entry';
+			// Still add to store so user sees it (marked as manual)
+			addTransaction(tx);
+			setTimeout(() => { saveError = ''; }, 5000);
+		}
+
+		saving = false;
 	}
 
 	function handleDelete(txId: string) {
@@ -117,6 +266,12 @@
 		>
 			{showAddForm ? 'Cancel' : '+ Add Entry'}
 		</button>
+		{#if saveSuccess}
+			<span class="text-xs text-[var(--green)]">{saveSuccess}</span>
+		{/if}
+		{#if saveError}
+			<span class="text-xs text-[var(--red)]">{saveError}</span>
+		{/if}
 		<span class="text-xs text-[var(--text-muted)]">
 			{sorted().length} rows
 		</span>
@@ -125,9 +280,30 @@
 	<!-- Add Entry Form -->
 	{#if showAddForm}
 		<div class="flex flex-wrap gap-2 px-3 py-2 bg-[var(--bg-tertiary)] border-b border-[var(--accent)]/30">
+			<!-- Row 1: File + Sheet selection -->
+			<div class="w-full flex gap-2 items-center mb-1">
+				<label class="text-xs text-[var(--text-muted)] shrink-0">Save to:</label>
+				<select bind:value={newFileName}
+					class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] flex-1 min-w-[180px]">
+					<option value="">Select file...</option>
+					{#each fileOptions() as file}
+						<option value={file.name}>{file.name}</option>
+					{/each}
+				</select>
+				<select bind:value={newSheet}
+					class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] flex-1 min-w-[160px]"
+					disabled={!newFileName}>
+					<option value="">Select sheet...</option>
+					{#each sheetOptions() as sheet}
+						<option value={sheet}>{sheet}</option>
+					{/each}
+				</select>
+			</div>
+
+			<!-- Row 2: Transaction fields -->
 			<input type="date" bind:value={newDate}
 				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] w-[130px]" />
-			<input type="text" bind:value={newDesc} placeholder="Description"
+			<input type="text" bind:value={newDesc} placeholder="Description *"
 				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] flex-1 min-w-[150px]" />
 			<input type="text" bind:value={newDesc2} placeholder="Description 2"
 				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] w-[150px]" />
@@ -148,9 +324,9 @@
 				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] w-[120px]" />
 			<button
 				onclick={handleAddEntry}
-				disabled={!newDesc}
+				disabled={!newDesc || !newFileName || !newSheet || saving}
 				class="bg-[var(--green)] text-black text-xs font-medium px-3 py-1 rounded hover:opacity-90 transition-opacity disabled:opacity-30"
-			>Add</button>
+			>{saving ? 'Saving...' : 'Add & Save'}</button>
 		</div>
 	{/if}
 

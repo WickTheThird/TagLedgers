@@ -321,6 +321,42 @@ async function handleLedgerPost(request, env) {
 	return jsonResponse({ success: true }, 200, env);
 }
 
+// --- Update existing Drive file (replace content) ---
+async function handleDriveUpdate(fileId, request, env) {
+	const tokenStr = getSessionToken(request);
+	if (!tokenStr) return jsonResponse({ error: 'Not authenticated' }, 401, env);
+	const session = await decryptSession(tokenStr, env.SESSION_SECRET);
+	if (!session) return jsonResponse({ error: 'Not authenticated' }, 401, env);
+
+	const formData = await request.formData();
+	const file = formData.get('file');
+	if (!file) return jsonResponse({ error: 'Missing file' }, 400, env);
+
+	const buffer = await file.arrayBuffer();
+	const mimeType = file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+	const token = await getServiceToken(env);
+
+	// Use Drive API PATCH to replace file content (keeps same file ID)
+	const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&supportsAllDrives=true`, {
+		method: 'PATCH',
+		headers: {
+			Authorization: `Bearer ${token}`,
+			'Content-Type': mimeType,
+			'Content-Length': String(buffer.byteLength)
+		},
+		body: buffer
+	});
+
+	if (!res.ok) {
+		const errText = await res.text();
+		console.error('Drive update failed:', res.status, errText);
+		return jsonResponse({ error: 'Failed to update file' }, 500, env);
+	}
+
+	const result = await res.json();
+	return jsonResponse({ id: result.id, name: result.name }, 200, env);
+}
+
 // --- Main Router ---
 export default {
 	async fetch(request, env) {
@@ -344,6 +380,9 @@ export default {
 
 			const downloadMatch = path.match(/^\/api\/drive\/download\/(.+)$/);
 			if (downloadMatch) return await handleDriveDownload(downloadMatch[1], request, env);
+
+			const updateMatch = path.match(/^\/api\/drive\/update\/(.+)$/);
+			if (updateMatch && request.method === 'PUT') return await handleDriveUpdate(updateMatch[1], request, env);
 
 			return new Response('Not found', { status: 404, headers: corsHeaders(env) });
 		} catch (e) {

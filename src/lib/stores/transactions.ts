@@ -5,6 +5,28 @@ export const transactions = writable<Transaction[]>([]);
 export const autoTagRules = writable<AutoTagRule[]>([]);
 export const loadedFiles = writable<string[]>([]);
 
+// Track loaded file metadata: driveFileId -> { name, driveId }
+export interface LoadedFileMeta {
+	driveId: string;
+	name: string;
+}
+export const loadedFileMeta = writable<LoadedFileMeta[]>([]);
+
+// Derived: for each loaded file, which sheets does it contain?
+export const fileSheetMap = derived(
+	[transactions, loadedFileMeta],
+	([$transactions, $loadedFileMeta]) => {
+		const map = new Map<string, { driveId: string; name: string; sheets: string[] }>();
+		for (const meta of $loadedFileMeta) {
+			const sheets = [...new Set(
+				$transactions.filter(t => t.fileName === meta.name).map(t => t.sourceSheet)
+			)].sort();
+			map.set(meta.name, { driveId: meta.driveId, name: meta.name, sheets });
+		}
+		return map;
+	}
+);
+
 export function updateTransactionTag(txId: string, newTag: string) {
 	transactions.update(txs => txs.map(t => t.id === txId ? { ...t, tag: newTag, type: inferType(t, newTag) } : t));
 }
