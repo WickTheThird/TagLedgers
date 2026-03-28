@@ -44,27 +44,47 @@
 		window.addEventListener('mousemove', onMove);
 		window.addEventListener('mouseup', onUp);
 	}
+
+	function startTouchDrag(e: TouchEvent) {
+		e.preventDefault();
+		dragging = true;
+		const startY = e.touches[0].clientY;
+		const startH = panelHeight;
+
+		function onTouchMove(ev: TouchEvent) {
+			panelHeight = Math.max(100, Math.min(600, startH - (ev.touches[0].clientY - startY)));
+		}
+		function onTouchEnd() {
+			dragging = false;
+			window.removeEventListener('touchmove', onTouchMove);
+			window.removeEventListener('touchend', onTouchEnd);
+		}
+		window.addEventListener('touchmove', onTouchMove, { passive: false });
+		window.addEventListener('touchend', onTouchEnd);
+	}
 </script>
 
 <div class="bg-[var(--bg-secondary)] border-t border-[var(--border)]">
 	<!-- Drag handle -->
 	<!-- svelte-ignore a11y_no_static_element_interactions -->
 	<div
-		class="h-1.5 cursor-row-resize flex items-center justify-center transition-colors {dragging ? 'bg-blue-500/30' : 'hover:bg-blue-500/20'}"
+		class="h-3 sm:h-1.5 cursor-row-resize flex items-center justify-center transition-colors {dragging ? 'bg-blue-500/30' : 'hover:bg-blue-500/20'}"
 		onmousedown={startDrag}
+		ontouchstart={startTouchDrag}
 	>
-		<div class="w-8 h-0.5 rounded bg-[var(--border)]"></div>
+		<div class="w-10 sm:w-8 h-1 sm:h-0.5 rounded bg-[var(--border)]"></div>
 	</div>
 
-	<div class="px-4 py-1.5 flex items-center justify-between border-b border-[var(--border)]">
-		<button onclick={() => { collapsed = !collapsed; }} class="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)] hover:text-[var(--accent)]">
+	<div class="px-3 sm:px-4 py-1.5 flex flex-col sm:flex-row sm:items-center justify-between gap-1 sm:gap-0 border-b border-[var(--border)]">
+		<button onclick={() => { collapsed = !collapsed; }} class="flex items-center gap-2 text-sm font-semibold text-[var(--text-primary)] hover:text-[var(--accent)] min-h-[36px] sm:min-h-0">
 			<span class="text-xs">{collapsed ? '\u25B6' : '\u25BC'}</span>
 			Tag Summary
+			<span class="text-xs font-normal text-[var(--text-muted)]">({sorted().length} tags)</span>
 		</button>
-		<div class="flex items-center gap-4 text-xs text-[var(--text-muted)]">
-			<span>{sorted().length} tags</span>
-			<span class="text-[var(--green)]">Credit: {fmt($totalStats.totalCredit)}</span>
-			<span class="text-[var(--red)]">Debit: {fmt($totalStats.totalDebit)}</span>
+		<div class="flex items-center gap-2 sm:gap-4 text-xs text-[var(--text-muted)] flex-wrap">
+			<span class="hidden sm:inline">{sorted().length} tags</span>
+			<span class="text-[var(--green)]">Cr: {fmt($totalStats.totalCredit)}</span>
+			<span class="text-[var(--red)]">Dr: {fmt($totalStats.totalDebit)}</span>
 			<span class="font-semibold" class:text-[var(--green)]={$totalStats.net >= 0} class:text-[var(--red)]={$totalStats.net < 0}>
 				Net: {fmt($totalStats.net)}
 			</span>
@@ -73,7 +93,7 @@
 
 	{#if !collapsed}
 		<div class="overflow-auto" style="max-height: {panelHeight}px">
-			<table class="w-full text-sm">
+			<table class="w-full text-sm min-w-[400px]">
 				<thead class="sticky top-0 bg-[var(--bg-secondary)]">
 					<tr>
 						{#each [

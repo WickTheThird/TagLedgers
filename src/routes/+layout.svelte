@@ -59,16 +59,16 @@
 
 <div class="min-h-screen bg-[var(--bg-primary)]">
 	{#if $user}
-		<header class="flex items-center justify-between px-4 py-2 bg-[var(--bg-secondary)] border-b border-[var(--border)]">
-			<div class="flex items-center gap-3">
-				<h1 class="text-lg font-semibold text-[var(--text-primary)]">TagLedger</h1>
+		<header class="flex items-center justify-between px-2 sm:px-4 py-2 bg-[var(--bg-secondary)] border-b border-[var(--border)]">
+			<div class="flex items-center gap-2">
+				<h1 class="text-base sm:text-lg font-semibold text-[var(--text-primary)]">TagLedger</h1>
 			</div>
-			<div class="flex items-center gap-3">
-				<span class="text-sm text-[var(--text-secondary)]">{$user.email}</span>
+			<div class="flex items-center gap-2 sm:gap-3">
+				<span class="hidden sm:inline text-sm text-[var(--text-secondary)]">{$user.email}</span>
 				{#if $user.picture}
 					<img src={$user.picture} alt="" class="w-7 h-7 rounded-full" referrerpolicy="no-referrer" />
 				{/if}
-				<button onclick={handleLogout} class="text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">Logout</button>
+				<button onclick={handleLogout} class="text-xs sm:text-sm text-[var(--text-muted)] hover:text-[var(--text-primary)] transition-colors">Logout</button>
 			</div>
 		</header>
 	{/if}

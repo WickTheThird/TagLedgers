@@ -44,10 +44,10 @@
 
 <svelte:window onclick={handleClickOutside} />
 
-<div class="bg-[var(--bg-secondary)] border-b border-[var(--border)] px-4 py-3">
+<div class="bg-[var(--bg-secondary)] border-b border-[var(--border)] px-3 sm:px-4 py-2 sm:py-3">
 	<div class="flex items-center gap-2 flex-wrap">
 		<!-- Date filters -->
-		<div class="flex items-center gap-1">
+		<div class="flex items-center gap-1 flex-wrap">
 			<input
 				type="date"
 				bind:value={$filters.dateFrom}
@@ -142,7 +142,7 @@
 			type="text"
 			placeholder="Search descriptions..."
 			bind:value={$filters.search}
-			class="bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] text-sm rounded px-3 py-1.5 focus:border-[var(--accent)] outline-none flex-1 min-w-[200px]"
+			class="bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] text-sm rounded px-3 py-1.5 focus:border-[var(--accent)] outline-none flex-1 min-w-0 w-full sm:min-w-[200px] sm:w-auto"
 		/>
 
 		{#if hasAnyFilter}
@@ -185,7 +185,7 @@
 	{/if}
 
 	<!-- Stats bar -->
-	<div class="flex items-center gap-6 mt-2 text-xs text-[var(--text-muted)]">
+	<div class="flex items-center flex-wrap gap-2 sm:gap-6 mt-2 text-[10px] sm:text-xs text-[var(--text-muted)]">
 		<span>{$totalStats.count} transactions</span>
 		<span class="text-[var(--green)]">Credit: {formatCurrency($totalStats.totalCredit)}</span>
 		<span class="text-[var(--red)]">Debit: {formatCurrency($totalStats.totalDebit)}</span>

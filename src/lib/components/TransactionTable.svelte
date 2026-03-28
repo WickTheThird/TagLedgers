@@ -281,17 +281,17 @@
 	{#if showAddForm}
 		<div class="flex flex-wrap gap-2 px-3 py-2 bg-[var(--bg-tertiary)] border-b border-[var(--accent)]/30">
 			<!-- Row 1: File + Sheet selection -->
-			<div class="w-full flex gap-2 items-center mb-1">
+			<div class="w-full flex flex-col sm:flex-row gap-2 items-stretch sm:items-center mb-1">
 				<label class="text-xs text-[var(--text-muted)] shrink-0">Save to:</label>
 				<select bind:value={newFileName}
-					class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] flex-1 min-w-[180px]">
+					class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1.5 sm:py-1 text-xs text-[var(--text-primary)] flex-1 min-w-0 w-full sm:min-w-[180px]">
 					<option value="">Select file...</option>
 					{#each fileOptions() as file}
 						<option value={file.name}>{file.name}</option>
 					{/each}
 				</select>
 				<select bind:value={newSheet}
-					class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] flex-1 min-w-[160px]"
+					class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1.5 sm:py-1 text-xs text-[var(--text-primary)] flex-1 min-w-0 w-full sm:min-w-[160px]"
 					disabled={!newFileName}>
 					<option value="">Select sheet...</option>
 					{#each sheetOptions() as sheet}
@@ -302,30 +302,30 @@
 
 			<!-- Row 2: Transaction fields -->
 			<input type="date" bind:value={newDate}
-				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] w-[130px]" />
+				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1.5 sm:py-1 text-xs text-[var(--text-primary)] w-full sm:w-[130px]" />
 			<input type="text" bind:value={newDesc} placeholder="Description *"
-				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] flex-1 min-w-[150px]" />
+				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1.5 sm:py-1 text-xs text-[var(--text-primary)] flex-1 min-w-0 w-full sm:min-w-[150px]" />
 			<input type="text" bind:value={newDesc2} placeholder="Description 2"
-				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] w-[150px]" />
+				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1.5 sm:py-1 text-xs text-[var(--text-primary)] w-full sm:w-[150px]" />
 			<select bind:value={newTag}
-				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] w-[140px]">
+				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1.5 sm:py-1 text-xs text-[var(--text-primary)] w-full sm:w-[140px]">
 				<option value="UNTAGGED">UNTAGGED</option>
 				{#each $availableTags as tag}
 					<option value={tag}>{tag}</option>
 				{/each}
 			</select>
 			<input type="number" bind:value={newDebit} placeholder="Debit" step="0.01"
-				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] w-[100px]" />
+				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1.5 sm:py-1 text-xs text-[var(--text-primary)] w-full sm:w-[100px]" />
 			<input type="number" bind:value={newCredit} placeholder="Credit" step="0.01"
-				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] w-[100px]" />
+				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1.5 sm:py-1 text-xs text-[var(--text-primary)] w-full sm:w-[100px]" />
 			<input type="text" bind:value={newAccount} placeholder="Account"
-				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] w-[120px]" />
+				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1.5 sm:py-1 text-xs text-[var(--text-primary)] w-full sm:w-[120px]" />
 			<input type="text" bind:value={newNotes} placeholder="Notes"
-				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1 text-xs text-[var(--text-primary)] w-[120px]" />
+				class="bg-[var(--bg-primary)] border border-[var(--border)] rounded px-2 py-1.5 sm:py-1 text-xs text-[var(--text-primary)] w-full sm:w-[120px]" />
 			<button
 				onclick={handleAddEntry}
 				disabled={!newDesc || !newFileName || !newSheet || saving}
-				class="bg-[var(--green)] text-black text-xs font-medium px-3 py-1 rounded hover:opacity-90 transition-opacity disabled:opacity-30"
+				class="bg-[var(--green)] text-black text-xs font-medium px-3 py-2 sm:py-1 rounded hover:opacity-90 transition-opacity disabled:opacity-30 w-full sm:w-auto"
 			>{saving ? 'Saving...' : 'Add & Save'}</button>
 		</div>
 	{/if}
@@ -353,7 +353,7 @@
 					<td class="px-1 py-1.5 text-center">
 						{#if tx.id.startsWith('manual-')}
 							<button
-								class="text-red-500/50 hover:text-red-500 text-xs opacity-0 group-hover:opacity-100 transition-opacity"
+								class="text-red-500/50 hover:text-red-500 text-xs sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
 								onclick={() => handleDelete(tx.id)}
 								title="Delete manual entry"
 							>&times;</button>
@@ -369,7 +369,7 @@
 					<td class="px-3 py-1.5">
 						{#if editingTagId === tx.id}
 							<select
-								class="bg-[var(--bg-tertiary)] border border-[var(--accent)] text-[var(--text-primary)] text-xs rounded px-1.5 py-0.5 outline-none"
+								class="bg-[var(--bg-tertiary)] border border-[var(--accent)] text-[var(--text-primary)] text-xs rounded px-1.5 py-1.5 sm:py-0.5 min-h-[36px] sm:min-h-0 outline-none"
 								value={tx.tag}
 								onchange={(e) => handleTagChange(tx.id, (e.target as HTMLSelectElement).value)}
 								onblur={() => { editingTagId = null; }}
@@ -380,7 +380,7 @@
 							</select>
 						{:else}
 							<button
-								class="text-xs px-2 py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--orange)] hover:bg-[var(--bg-hover)] transition-colors"
+								class="text-xs px-2 py-1.5 sm:py-0.5 rounded bg-[var(--bg-tertiary)] text-[var(--orange)] hover:bg-[var(--bg-hover)] transition-colors min-h-[36px] sm:min-h-0"
 								onclick={() => { editingTagId = tx.id; }}
 							>
 								{tx.tag}

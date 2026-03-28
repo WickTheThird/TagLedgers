@@ -43,31 +43,33 @@
 		<p class="text-[var(--text-muted)]">Redirecting to login...</p>
 	</div>
 {:else}
-	<div class="flex flex-col h-[calc(100vh-44px)]">
-		<div class="flex items-center gap-3 px-4 py-2 bg-[var(--bg-secondary)] border-b border-[var(--border)]">
+	<div class="flex flex-col h-[calc(100dvh-44px)]">
+		<div class="flex flex-wrap items-center gap-2 sm:gap-3 px-3 sm:px-4 py-2 bg-[var(--bg-secondary)] border-b border-[var(--border)]">
 			<FileSelector />
-			<div class="flex-1"></div>
-			{#if $transactions.length > 0}
-				<button
-					onclick={exportFiltered}
-					class="text-xs bg-[var(--bg-tertiary)] border border-[var(--border)] px-3 py-1 rounded hover:border-[var(--accent)] transition-colors"
-				>Export ({$filteredTransactions.length})</button>
-			{/if}
-			<div class="flex items-center gap-1 bg-[var(--bg-tertiary)] rounded p-0.5">
-				<button
-					class="text-xs px-3 py-1 rounded transition-colors"
-					class:bg-[var(--accent)]={activeTab === 'table'}
-					class:text-white={activeTab === 'table'}
-					class:text-[var(--text-muted)]={activeTab !== 'table'}
-					onclick={() => { activeTab = 'table'; }}
-				>Transactions</button>
-				<button
-					class="text-xs px-3 py-1 rounded transition-colors"
-					class:bg-[var(--accent)]={activeTab === 'pnl'}
-					class:text-white={activeTab === 'pnl'}
-					class:text-[var(--text-muted)]={activeTab !== 'pnl'}
-					onclick={() => { activeTab = 'pnl'; }}
-				>P&L</button>
+			<div class="hidden sm:block flex-1"></div>
+			<div class="flex items-center gap-2 ml-auto sm:ml-0">
+				{#if $transactions.length > 0}
+					<button
+						onclick={exportFiltered}
+						class="text-xs bg-[var(--bg-tertiary)] border border-[var(--border)] px-3 py-1 rounded hover:border-[var(--accent)] transition-colors"
+					>Export ({$filteredTransactions.length})</button>
+				{/if}
+				<div class="flex items-center gap-1 bg-[var(--bg-tertiary)] rounded p-0.5">
+					<button
+						class="text-xs px-3 py-1 rounded transition-colors"
+						class:bg-[var(--accent)]={activeTab === 'table'}
+						class:text-white={activeTab === 'table'}
+						class:text-[var(--text-muted)]={activeTab !== 'table'}
+						onclick={() => { activeTab = 'table'; }}
+					>Transactions</button>
+					<button
+						class="text-xs px-3 py-1 rounded transition-colors"
+						class:bg-[var(--accent)]={activeTab === 'pnl'}
+						class:text-white={activeTab === 'pnl'}
+						class:text-[var(--text-muted)]={activeTab !== 'pnl'}
+						onclick={() => { activeTab = 'pnl'; }}
+					>P&L</button>
+				</div>
 			</div>
 		</div>
 

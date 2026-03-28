@@ -190,15 +190,15 @@
 </script>
 
 <div class="relative">
-	<div class="flex items-center gap-2">
+	<div class="flex items-center gap-2 flex-wrap">
 		<button
 			onclick={() => { showPanel = !showPanel; if (showPanel && !driveFiles.length) fetchDriveFiles(); }}
-			class="bg-[var(--accent)] text-white text-sm px-3 py-1.5 rounded hover:bg-[var(--accent-hover)] transition-colors"
+			class="bg-[var(--accent)] text-white text-sm px-3 py-1.5 min-h-[44px] sm:min-h-0 rounded hover:bg-[var(--accent-hover)] transition-colors"
 		>
 			{showPanel ? 'Close' : 'Files'}
 		</button>
 
-		<label class="bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm px-3 py-1.5 rounded hover:border-[var(--accent)] transition-colors cursor-pointer">
+		<label class="bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm px-3 py-1.5 min-h-[44px] sm:min-h-0 rounded hover:border-[var(--accent)] transition-colors cursor-pointer flex items-center">
 			{uploading ? 'Uploading...' : 'Upload & Sync'}
 			<input type="file" accept=".xlsx,.xls" multiple onchange={handleLocalUpload} class="hidden" disabled={uploading} />
 		</label>
@@ -210,7 +210,7 @@
 	</div>
 
 	{#if showPanel}
-		<div class="absolute top-full left-0 mt-2 bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg shadow-xl z-50 w-[480px] max-h-[500px] flex flex-col">
+		<div class="fixed inset-x-2 top-16 bottom-4 sm:absolute sm:inset-auto sm:top-full sm:left-0 sm:mt-2 sm:bottom-auto bg-[var(--bg-secondary)] border border-[var(--border)] rounded-lg shadow-xl z-50 w-auto sm:w-[480px] max-h-none sm:max-h-[500px] flex flex-col">
 			<!-- Loaded files section -->
 			{#if loaded.length > 0}
 				<div class="border-b border-[var(--border)]">
@@ -218,12 +218,12 @@
 						<h3 class="text-xs font-semibold text-[var(--text-muted)] uppercase">Loaded ({loaded.length})</h3>
 					</div>
 					{#each loaded as fileInfo}
-						<div class="flex items-center justify-between px-3 py-1.5 border-t border-[var(--border)]/30">
+						<div class="flex items-center justify-between px-3 py-1.5 min-h-[44px] border-t border-[var(--border)]/30">
 							<div class="flex-1 min-w-0">
 								<p class="text-sm truncate text-[var(--green)]">{fileInfo.name}</p>
 								<p class="text-xs text-[var(--text-muted)]">{fileInfo.transactionCount} transactions &middot; {fileInfo.source}</p>
 							</div>
-							<button onclick={() => unloadFile(fileInfo)} class="text-xs text-[var(--red)] hover:underline ml-2">Unload</button>
+							<button onclick={() => unloadFile(fileInfo)} class="text-xs text-[var(--red)] hover:underline ml-2 min-h-[44px] flex items-center">Unload</button>
 						</div>
 					{/each}
 				</div>
@@ -231,15 +231,15 @@
 
 			<!-- Drive files section -->
 			<div class="flex-1 overflow-auto">
-				<div class="px-3 py-2 flex items-center justify-between border-b border-[var(--border)]">
+				<div class="px-3 py-2 flex flex-wrap items-center justify-between gap-2 border-b border-[var(--border)]">
 					<h3 class="text-xs font-semibold text-[var(--text-muted)] uppercase">Google Drive</h3>
-					<div class="flex items-center gap-2">
-						<button onclick={loadAllFiles} class="text-xs bg-[var(--accent)] text-white px-2 py-0.5 rounded hover:bg-[var(--accent-hover)]">Load all</button>
-						<button onclick={selectAllUnloaded} class="text-xs bg-[var(--orange)] text-white px-2 py-0.5 rounded hover:opacity-80">Select all</button>
+					<div class="flex items-center gap-2 flex-wrap">
+						<button onclick={loadAllFiles} class="text-xs bg-[var(--accent)] text-white px-3 py-1.5 min-h-[36px] sm:min-h-0 sm:px-2 sm:py-0.5 rounded hover:bg-[var(--accent-hover)]">Load all</button>
+						<button onclick={selectAllUnloaded} class="text-xs bg-[var(--orange)] text-white px-3 py-1.5 min-h-[36px] sm:min-h-0 sm:px-2 sm:py-0.5 rounded hover:opacity-80">Select all</button>
 						{#if selected.size > 0}
-							<button onclick={selectNone} class="text-xs text-[var(--text-muted)] hover:underline">None</button>
+							<button onclick={selectNone} class="text-xs text-[var(--text-muted)] hover:underline min-h-[36px] sm:min-h-0">None</button>
 						{/if}
-						<button onclick={fetchDriveFiles} class="text-xs text-[var(--accent)] hover:underline">
+						<button onclick={fetchDriveFiles} class="text-xs text-[var(--accent)] hover:underline min-h-[36px] sm:min-h-0">
 							{loading ? 'Loading...' : 'Refresh'}
 						</button>
 					</div>
@@ -250,7 +250,7 @@
 				{/if}
 
 				{#each driveFiles as file}
-					<div class="flex items-center gap-2 px-3 py-2 hover:bg-[var(--bg-hover)] border-b border-[var(--border)]/30">
+					<div class="flex items-center gap-2 px-3 py-2 min-h-[44px] hover:bg-[var(--bg-hover)] border-b border-[var(--border)]/30">
 						{#if !isFileLoaded(file.id)}
 							<input
 								type="checkbox"
@@ -299,7 +299,7 @@
 					<button
 						onclick={loadSelected}
 						disabled={loadingSelected}
-						class="bg-[var(--accent)] text-white text-xs px-3 py-1 rounded hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50"
+						class="bg-[var(--accent)] text-white text-xs px-3 py-1.5 min-h-[36px] sm:min-h-0 sm:py-1 rounded hover:bg-[var(--accent-hover)] transition-colors disabled:opacity-50"
 					>
 						{loadingSelected ? 'Loading...' : `Load ${selectedCount} file(s)`}
 					</button>
