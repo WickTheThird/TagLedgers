@@ -83,14 +83,13 @@
 			</div>
 		{:else}
 			<FilterBar />
-			{#if activeTab === 'table'}
+			<div class={activeTab === 'table' ? 'contents' : 'hidden'}>
 				<TransactionTable />
 				<TagSummary />
-			{:else}
-				<div class="flex-1 overflow-auto">
-					<PnLView />
-				</div>
-			{/if}
+			</div>
+			<div class={activeTab === 'pnl' ? 'flex-1 overflow-auto' : 'hidden'}>
+				<PnLView />
+			</div>
 		{/if}
 	</div>
 {/if}

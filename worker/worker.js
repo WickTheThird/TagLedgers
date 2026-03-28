@@ -79,6 +79,10 @@ async function getServiceToken(env) {
 		body: new URLSearchParams({ grant_type: 'urn:ietf:params:oauth:grant-type:jwt-bearer', assertion: jwt })
 	});
 	const data = await res.json();
+	if (!data.access_token) {
+		console.error('Service account token exchange failed:', JSON.stringify(data));
+		throw new Error('Failed to get service account token');
+	}
 	cachedToken = { token: data.access_token, expiresAt: Date.now() + (data.expires_in - 60) * 1000 };
 	return cachedToken.token;
 }
@@ -88,7 +92,7 @@ async function handleAuthGoogle(env) {
 	console.log('AUTH GOOGLE: redirect_uri =', env.GOOGLE_REDIRECT_URI);
 	const params = new URLSearchParams({
 		client_id: env.GOOGLE_CLIENT_ID, redirect_uri: env.GOOGLE_REDIRECT_URI,
-		response_type: 'code', scope: 'openid email profile https://www.googleapis.com/auth/drive.file',
+		response_type: 'code', scope: 'openid email profile https://www.googleapis.com/auth/drive',
 		access_type: 'offline', prompt: 'consent'
 	});
 	return Response.redirect(`https://accounts.google.com/o/oauth2/v2/auth?${params}`, 302);
@@ -175,7 +179,6 @@ async function handleDriveFiles(request, env) {
 	const session = await decryptSession(cookie, env.SESSION_SECRET);
 	if (!session) return jsonResponse({ error: 'Not authenticated' }, 401, env);
 
-	const token = await getServiceToken(env);
 	const folderIds = (env.DRIVE_FOLDER_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
 	const folderQuery = folderIds.map(id => `'${id}' in parents`).join(' or ');
 	const query = `(${folderQuery}) and (mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType='application/vnd.ms-excel') and trashed=false`;
@@ -185,31 +188,17 @@ async function handleDriveFiles(request, env) {
 		orderBy: 'modifiedTime desc', pageSize: '100', supportsAllDrives: 'true', includeItemsFromAllDrives: 'true'
 	});
 
+	// Use user's OAuth token for Drive (service account lacks Drive scope)
 	const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
-		headers: { Authorization: `Bearer ${token}` }
+		headers: { Authorization: `Bearer ${session.accessToken}` }
 	});
-	const data = await res.json();
-	const allFiles = data.files || [];
-
-	// Filter by ledger: each user only sees files they uploaded
-	const sheetId = env.DB_LEDGER_SHEET_ID;
-	let userFileIds = new Set();
-	if (sheetId) {
-		const ledgerRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A:E`, {
-			headers: { Authorization: `Bearer ${token}` }
-		});
-		if (ledgerRes.ok) {
-			const ledgerData = await ledgerRes.json();
-			const rows = ledgerData.values || [];
-			for (const row of rows.slice(1)) {
-				if ((row[4] || '').toLowerCase() === session.email.toLowerCase()) {
-					userFileIds.add(row[1]);
-				}
-			}
-		}
+	if (!res.ok) {
+		const errBody = await res.text();
+		console.error('Drive files list failed:', res.status, errBody);
+		return jsonResponse({ error: 'Failed to list files', detail: errBody }, 500, env);
 	}
-	const filteredFiles = allFiles.filter(f => userFileIds.has(f.id));
-	return jsonResponse({ files: filteredFiles }, 200, env);
+	const data = await res.json();
+	return jsonResponse({ files: data.files || [] }, 200, env);
 }
 
 async function handleDriveDownload(fileId, request, env) {
@@ -218,9 +207,8 @@ async function handleDriveDownload(fileId, request, env) {
 	const session = await decryptSession(cookie, env.SESSION_SECRET);
 	if (!session) return new Response('Not authenticated', { status: 401, headers: corsHeaders(env) });
 
-	const token = await getServiceToken(env);
 	const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
-		headers: { Authorization: `Bearer ${token}` }
+		headers: { Authorization: `Bearer ${session.accessToken}` }
 	});
 	const buffer = await res.arrayBuffer();
 	return new Response(buffer, { headers: { 'Content-Type': 'application/octet-stream', ...corsHeaders(env) } });
@@ -247,8 +235,8 @@ async function handleDriveUpload(request, env) {
 	const buffer = await file.arrayBuffer();
 	const mimeType = file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-	// Use service account for upload so it owns the file and can list it
-	const token = await getServiceToken(env);
+	// Use user's OAuth token for upload (service accounts don't have storage quota)
+	const token = session.accessToken;
 	const initRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true', {
 		method: 'POST', headers: {
 			Authorization: `Bearer ${token}`, 'Content-Type': 'application/json',
@@ -256,14 +244,22 @@ async function handleDriveUpload(request, env) {
 		},
 		body: JSON.stringify({ name: file.name, parents: [folderId] })
 	});
-	if (!initRes.ok) return jsonResponse({ error: 'Upload init failed' }, 500, env);
+	if (!initRes.ok) {
+		const errBody = await initRes.text();
+		console.error('Drive upload init failed:', initRes.status, errBody);
+		return jsonResponse({ error: 'Upload init failed', detail: errBody }, 500, env);
+	}
 	const uploadUrl = initRes.headers.get('Location');
 
 	const uploadRes = await fetch(uploadUrl, {
 		method: 'PUT', headers: { 'Content-Type': mimeType, 'Content-Length': String(buffer.byteLength) },
 		body: buffer
 	});
-	if (!uploadRes.ok) return jsonResponse({ error: 'Upload failed' }, 500, env);
+	if (!uploadRes.ok) {
+		const errBody = await uploadRes.text();
+		console.error('Drive upload failed:', uploadRes.status, errBody);
+		return jsonResponse({ error: 'Upload failed', detail: errBody }, 500, env);
+	}
 	const result = await uploadRes.json();
 	return jsonResponse({ id: result.id, name: result.name, webViewLink: `https://drive.google.com/file/d/${result.id}/view` }, 200, env);
 }
@@ -314,9 +310,16 @@ async function handleLedgerPost(request, env) {
 	if (checkRes.ok) {
 		const checkData = await checkRes.json();
 		const rows = checkData.values || [];
-		// Check duplicate per user: same file name + folder + uploader
-		if (rows.some(r => r[0] === entry.fileName && r[3] === entry.folder && (r[4] || '').toLowerCase() === session.email.toLowerCase())) {
-			return jsonResponse({ success: true, duplicate: true }, 200, env);
+		// Check duplicate per user: same file name + folder + uploader → update existing row
+		const dupIdx = rows.findIndex(r => r[0] === entry.fileName && r[3] === entry.folder && (r[4] || '').toLowerCase() === session.email.toLowerCase());
+		if (dupIdx >= 0) {
+			const updatedRow = [entry.fileName, entry.driveFileId, entry.driveLink, entry.folder, session.email,
+				new Date().toISOString(), String(entry.sheetCount), String(entry.transactionCount)];
+			await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A${dupIdx + 1}:H${dupIdx + 1}?valueInputOption=RAW`, {
+				method: 'PUT', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+				body: JSON.stringify({ values: [updatedRow] })
+			});
+			return jsonResponse({ success: true, updated: true }, 200, env);
 		}
 		if (rows.length === 0) {
 			await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:H1?valueInputOption=RAW`, {
@@ -349,13 +352,12 @@ async function handleDriveUpdate(fileId, request, env) {
 
 	const buffer = await file.arrayBuffer();
 	const mimeType = file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
-	const token = await getServiceToken(env);
 
 	// Use Drive API PATCH to replace file content (keeps same file ID)
 	const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media&supportsAllDrives=true`, {
 		method: 'PATCH',
 		headers: {
-			Authorization: `Bearer ${token}`,
+			Authorization: `Bearer ${session.accessToken}`,
 			'Content-Type': mimeType,
 			'Content-Length': String(buffer.byteLength)
 		},
