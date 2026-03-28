@@ -3,6 +3,19 @@
 	<head>
 		<meta charset="utf-8" />
 		<meta name="viewport" content="width=device-width, initial-scale=1" />
+		<script>
+			// Capture auth token from hash fragment BEFORE SvelteKit loads
+			// This runs synchronously so the hash is preserved
+			(function() {
+				var h = window.location.hash;
+				if (h && h.indexOf('#token=') === 0) {
+					try {
+						localStorage.setItem('tagledger_token', decodeURIComponent(h.substring(7)));
+						history.replaceState(null, '', window.location.pathname);
+					} catch(e) {}
+				}
+			})();
+		</script>
 		%sveltekit.head%
 	</head>
 	<body data-sveltekit-preload-data="hover">
