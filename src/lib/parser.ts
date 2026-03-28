@@ -77,6 +77,7 @@ export function parseExcelBuffer(buffer: ArrayBuffer, fileName: string): Transac
 	const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
 	const transactions: Transaction[] = [];
 	let globalId = 0;
+	const batch = Math.random().toString(36).slice(2, 8);
 
 	for (const sheetName of workbook.SheetNames) {
 		const sheet = workbook.Sheets[sheetName];
@@ -123,7 +124,7 @@ export function parseExcelBuffer(buffer: ArrayBuffer, fileName: string): Transac
 			const type: 'Credit' | 'Debit' = txType.toLowerCase() === 'credit' ? 'Credit' : 'Debit';
 
 			transactions.push({
-				id: `${fileName}-${sheetName}-${globalId++}`,
+				id: `${fileName}-${sheetName}-${batch}-${globalId++}`,
 				date,
 				description: getStr('description'),
 				description2: getStr('description2'),
