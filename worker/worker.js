@@ -176,6 +176,25 @@ async function handleDriveFiles(request, env) {
 	if (!session) return jsonResponse({ error: 'Not authenticated' }, 401, env);
 
 	const token = await getServiceToken(env);
+
+	// Get ledger entries for this user to filter Drive files
+	const sheetId = env.DB_LEDGER_SHEET_ID;
+	let userFileIds = new Set();
+	if (sheetId) {
+		const ledgerRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A:E`, {
+			headers: { Authorization: `Bearer ${token}` }
+		});
+		if (ledgerRes.ok) {
+			const ledgerData = await ledgerRes.json();
+			const rows = ledgerData.values || [];
+			for (const row of rows.slice(1)) {
+				if ((row[4] || '').toLowerCase() === session.email.toLowerCase()) {
+					userFileIds.add(row[1]); // Drive File ID
+				}
+			}
+		}
+	}
+
 	const folderIds = (env.DRIVE_FOLDER_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
 	const folderQuery = folderIds.map(id => `'${id}' in parents`).join(' or ');
 	const query = `(${folderQuery}) and (mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType='application/vnd.ms-excel') and trashed=false`;
@@ -189,7 +208,11 @@ async function handleDriveFiles(request, env) {
 		headers: { Authorization: `Bearer ${token}` }
 	});
 	const data = await res.json();
-	return jsonResponse({ files: data.files || [] }, 200, env);
+	const allFiles = data.files || [];
+
+	// Only return files this user uploaded (matched via ledger)
+	const filteredFiles = allFiles.filter(f => userFileIds.has(f.id));
+	return jsonResponse({ files: filteredFiles }, 200, env);
 }
 
 async function handleDriveDownload(fileId, request, env) {
