@@ -247,9 +247,11 @@ async function handleDriveUpload(request, env) {
 	const buffer = await file.arrayBuffer();
 	const mimeType = file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
+	// Use service account for upload so it owns the file and can list it
+	const token = await getServiceToken(env);
 	const initRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true', {
 		method: 'POST', headers: {
-			Authorization: `Bearer ${session.accessToken}`, 'Content-Type': 'application/json',
+			Authorization: `Bearer ${token}`, 'Content-Type': 'application/json',
 			'X-Upload-Content-Type': mimeType, 'X-Upload-Content-Length': String(buffer.byteLength)
 		},
 		body: JSON.stringify({ name: file.name, parents: [folderId] })
