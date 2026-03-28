@@ -191,16 +191,7 @@ async function handleDriveFiles(request, env) {
 	const data = await res.json();
 	const allFiles = data.files || [];
 
-	// Owner (first email in ALLOWED_EMAILS) sees all files
-	// Other users only see files they uploaded (via ledger)
-	const allowed = (env.ALLOWED_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
-	const isOwner = allowed.length > 0 && allowed[0] === session.email.toLowerCase();
-
-	if (isOwner) {
-		return jsonResponse({ files: allFiles }, 200, env);
-	}
-
-	// Non-owner: filter by ledger entries
+	// Filter by ledger: each user only sees files they uploaded
 	const sheetId = env.DB_LEDGER_SHEET_ID;
 	let userFileIds = new Set();
 	if (sheetId) {
@@ -298,10 +289,8 @@ async function handleLedgerGet(request, env) {
 		folder: row[3] || '', uploadedBy: row[4] || '', uploadedAt: row[5] || '',
 		sheetCount: parseInt(row[6] || '0'), transactionCount: parseInt(row[7] || '0')
 	}));
-	// Owner (first email in ALLOWED_EMAILS) sees all entries, others see only their own
-	const allowed = (env.ALLOWED_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
-	const isOwner = allowed.length > 0 && allowed[0] === session.email.toLowerCase();
-	const entries = isOwner ? allEntries : allEntries.filter(e => e.uploadedBy.toLowerCase() === session.email.toLowerCase());
+	// Each user only sees their own uploads
+	const entries = allEntries.filter(e => e.uploadedBy.toLowerCase() === session.email.toLowerCase());
 	return jsonResponse({ entries }, 200, env);
 }
 
