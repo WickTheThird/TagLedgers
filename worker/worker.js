@@ -176,25 +176,6 @@ async function handleDriveFiles(request, env) {
 	if (!session) return jsonResponse({ error: 'Not authenticated' }, 401, env);
 
 	const token = await getServiceToken(env);
-
-	// Get ledger entries for this user to filter Drive files
-	const sheetId = env.DB_LEDGER_SHEET_ID;
-	let userFileIds = new Set();
-	if (sheetId) {
-		const ledgerRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A:E`, {
-			headers: { Authorization: `Bearer ${token}` }
-		});
-		if (ledgerRes.ok) {
-			const ledgerData = await ledgerRes.json();
-			const rows = ledgerData.values || [];
-			for (const row of rows.slice(1)) {
-				if ((row[4] || '').toLowerCase() === session.email.toLowerCase()) {
-					userFileIds.add(row[1]); // Drive File ID
-				}
-			}
-		}
-	}
-
 	const folderIds = (env.DRIVE_FOLDER_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
 	const folderQuery = folderIds.map(id => `'${id}' in parents`).join(' or ');
 	const query = `(${folderQuery}) and (mimeType='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' or mimeType='application/vnd.ms-excel') and trashed=false`;
@@ -210,7 +191,32 @@ async function handleDriveFiles(request, env) {
 	const data = await res.json();
 	const allFiles = data.files || [];
 
-	// Only return files this user uploaded (matched via ledger)
+	// Owner (first email in ALLOWED_EMAILS) sees all files
+	// Other users only see files they uploaded (via ledger)
+	const allowed = (env.ALLOWED_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+	const isOwner = allowed.length > 0 && allowed[0] === session.email.toLowerCase();
+
+	if (isOwner) {
+		return jsonResponse({ files: allFiles }, 200, env);
+	}
+
+	// Non-owner: filter by ledger entries
+	const sheetId = env.DB_LEDGER_SHEET_ID;
+	let userFileIds = new Set();
+	if (sheetId) {
+		const ledgerRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A:E`, {
+			headers: { Authorization: `Bearer ${token}` }
+		});
+		if (ledgerRes.ok) {
+			const ledgerData = await ledgerRes.json();
+			const rows = ledgerData.values || [];
+			for (const row of rows.slice(1)) {
+				if ((row[4] || '').toLowerCase() === session.email.toLowerCase()) {
+					userFileIds.add(row[1]);
+				}
+			}
+		}
+	}
 	const filteredFiles = allFiles.filter(f => userFileIds.has(f.id));
 	return jsonResponse({ files: filteredFiles }, 200, env);
 }
@@ -292,8 +298,10 @@ async function handleLedgerGet(request, env) {
 		folder: row[3] || '', uploadedBy: row[4] || '', uploadedAt: row[5] || '',
 		sheetCount: parseInt(row[6] || '0'), transactionCount: parseInt(row[7] || '0')
 	}));
-	// Filter: each user only sees their own uploads
-	const entries = allEntries.filter(e => e.uploadedBy.toLowerCase() === session.email.toLowerCase());
+	// Owner (first email in ALLOWED_EMAILS) sees all entries, others see only their own
+	const allowed = (env.ALLOWED_EMAILS || '').split(',').map(e => e.trim().toLowerCase()).filter(Boolean);
+	const isOwner = allowed.length > 0 && allowed[0] === session.email.toLowerCase();
+	const entries = isOwner ? allEntries : allEntries.filter(e => e.uploadedBy.toLowerCase() === session.email.toLowerCase());
 	return jsonResponse({ entries }, 200, env);
 }
 
