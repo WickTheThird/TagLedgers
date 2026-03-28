@@ -17,12 +17,12 @@
 	}
 
 	onMount(async () => {
-		// Check URL for token from auth callback
+		// Token is set by the Worker's redirect page via localStorage directly
+		// Also support legacy ?token= param as fallback
 		const params = new URLSearchParams(window.location.search);
 		const token = params.get('token');
 		if (token) {
 			setSessionToken(token);
-			// Clean URL
 			window.history.replaceState({}, '', window.location.pathname);
 		}
 

@@ -5,6 +5,24 @@ export const transactions = writable<Transaction[]>([]);
 export const autoTagRules = writable<AutoTagRule[]>([]);
 export const loadedFiles = writable<string[]>([]);
 
+export function updateTransactionTag(txId: string, newTag: string) {
+	transactions.update(txs => txs.map(t => t.id === txId ? { ...t, tag: newTag, type: inferType(t, newTag) } : t));
+}
+
+export function addTransaction(tx: Transaction) {
+	transactions.update(txs => [...txs, tx]);
+}
+
+export function deleteTransaction(txId: string) {
+	transactions.update(txs => txs.filter(t => t.id !== txId));
+}
+
+function inferType(t: Transaction, tag: string): 'Credit' | 'Debit' {
+	if (t.credit && t.credit > 0) return 'Credit';
+	if (t.debit && t.debit > 0) return 'Debit';
+	return t.type;
+}
+
 export const filters = writable<FilterState>({
 	dateFrom: '',
 	dateTo: '',
