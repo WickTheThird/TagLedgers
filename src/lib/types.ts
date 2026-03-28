@@ -22,6 +22,7 @@ export interface FilterState {
 	accounts: string[];
 	tags: string[];
 	types: ('Credit' | 'Debit')[];
+	sheets: string[];
 	search: string;
 }
 

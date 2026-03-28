@@ -11,6 +11,7 @@ export const filters = writable<FilterState>({
 	accounts: [],
 	tags: [],
 	types: [],
+	sheets: [],
 	search: ''
 });
 
@@ -23,6 +24,7 @@ export const filteredTransactions = derived(
 			if ($filters.accounts.length && !$filters.accounts.includes(t.account)) return false;
 			if ($filters.tags.length && !$filters.tags.includes(t.tag)) return false;
 			if ($filters.types.length && !$filters.types.includes(t.type)) return false;
+			if ($filters.sheets.length && !$filters.sheets.includes(t.sourceSheet)) return false;
 			if ($filters.search) {
 				const s = $filters.search.toLowerCase();
 				if (
@@ -97,6 +99,7 @@ export const pnlData = derived(filteredTransactions, ($filtered) => {
 export const availableAccounts = derived(transactions, ($t) => [...new Set($t.map(t => t.account))].sort());
 export const availableTags = derived(transactions, ($t) => [...new Set($t.map(t => t.tag))].sort());
 export const availableYears = derived(transactions, ($t) => [...new Set($t.map(t => t.year))].sort());
+export const availableSheets = derived(transactions, ($t) => [...new Set($t.map(t => t.sourceSheet))].sort());
 
 export const totalStats = derived(filteredTransactions, ($filtered) => {
 	let totalDebit = 0;

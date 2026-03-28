@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { filters, availableAccounts, availableTags, totalStats } from '$lib/stores/transactions';
+	import { filters, availableAccounts, availableTags, availableSheets, totalStats } from '$lib/stores/transactions';
 	import FilterPopup from './FilterPopup.svelte';
 
 	let activePopup = $state<string | null>(null);
@@ -9,7 +9,7 @@
 	}
 
 	function clearFilters() {
-		$filters = { dateFrom: '', dateTo: '', accounts: [], tags: [], types: [], search: '' };
+		$filters = { dateFrom: '', dateTo: '', accounts: [], tags: [], types: [], sheets: [], search: '' };
 	}
 
 	function removeAccount(acc: string) {
@@ -18,13 +18,16 @@
 	function removeTag(tag: string) {
 		$filters.tags = $filters.tags.filter(t => t !== tag);
 	}
+	function removeSheet(sheet: string) {
+		$filters.sheets = $filters.sheets.filter(s => s !== sheet);
+	}
 	function removeType(type: 'Credit' | 'Debit') {
 		$filters.types = $filters.types.filter(t => t !== type);
 	}
 
 	let hasAnyFilter = $derived(
 		$filters.dateFrom || $filters.dateTo || $filters.accounts.length ||
-		$filters.tags.length || $filters.types.length || $filters.search
+		$filters.tags.length || $filters.types.length || $filters.sheets.length || $filters.search
 	);
 
 	function formatCurrency(n: number) {
@@ -115,6 +118,25 @@
 			{/if}
 		</div>
 
+		<!-- Sheet filter -->
+		<div class="relative filter-popup-container">
+			<button
+				onclick={() => togglePopup('sheets')}
+				class="bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm rounded px-3 py-1.5 hover:border-[var(--accent)] transition-colors"
+				class:border-[var(--accent)]={$filters.sheets.length > 0}
+				class:text-[var(--accent)]={$filters.sheets.length > 0}
+			>
+				Sheet {$filters.sheets.length ? `(${$filters.sheets.length})` : ''}
+			</button>
+			{#if activePopup === 'sheets'}
+				<FilterPopup
+					options={$availableSheets}
+					selected={$filters.sheets}
+					onchange={(val) => { $filters.sheets = val; }}
+				/>
+			{/if}
+		</div>
+
 		<!-- Search -->
 		<input
 			type="text"
@@ -151,6 +173,12 @@
 				>
 					{type}
 					<button onclick={() => removeType(type)} class="hover:text-white">&times;</button>
+				</span>
+			{/each}
+			{#each $filters.sheets as sheet}
+				<span class="inline-flex items-center gap-1 bg-purple-500/20 text-purple-400 text-xs px-2 py-0.5 rounded-full">
+					{sheet}
+					<button onclick={() => removeSheet(sheet)} class="hover:text-white">&times;</button>
 				</span>
 			{/each}
 		</div>
