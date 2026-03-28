@@ -143,18 +143,10 @@ async function handleAuthCallback(request, env) {
 		}, env.SESSION_SECRET);
 
 		console.log('Auth success, redirecting to', env.FRONTEND_URL);
-		// Return an HTML page that stores the token in localStorage then redirects
-		// This avoids putting the token in the URL (which triggers Chrome's "Dangerous site" warning)
-		const html = `<!DOCTYPE html><html><head><title>Logging in...</title></head><body>
-			<script>
-				localStorage.setItem('tagledger_token', ${JSON.stringify(session)});
-				window.location.replace('${env.FRONTEND_URL}/');
-			</script>
-			<p>Logging in...</p>
-		</body></html>`;
-		return new Response(html, {
-			status: 200, headers: {
-				'Content-Type': 'text/html',
+		// Pass token via hash fragment - not sent to server, not logged, picked up by client JS
+		return new Response(null, {
+			status: 302, headers: {
+				Location: `${env.FRONTEND_URL}/#token=${encodeURIComponent(session)}`,
 				...corsHeaders(env)
 			}
 		});

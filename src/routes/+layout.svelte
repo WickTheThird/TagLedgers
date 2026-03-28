@@ -17,12 +17,18 @@
 	}
 
 	onMount(async () => {
-		// Token is set by the Worker's redirect page via localStorage directly
+		// Check hash fragment for token (from Worker auth redirect)
+		const hash = window.location.hash;
+		if (hash.startsWith('#token=')) {
+			const token = decodeURIComponent(hash.slice(7));
+			setSessionToken(token);
+			window.history.replaceState({}, '', window.location.pathname);
+		}
 		// Also support legacy ?token= param as fallback
 		const params = new URLSearchParams(window.location.search);
-		const token = params.get('token');
-		if (token) {
-			setSessionToken(token);
+		const queryToken = params.get('token');
+		if (queryToken) {
+			setSessionToken(queryToken);
 			window.history.replaceState({}, '', window.location.pathname);
 		}
 
