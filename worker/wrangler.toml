@@ -1,0 +1,9 @@
+name = "tagledger-api"
+main = "worker.js"
+compatibility_date = "2024-01-01"
+
+# Routes - uncomment and set your domain after DNS setup
+# routes = [{ pattern = "api.tagledgers.com/*", zone_name = "tagledgers.com" }]
+
+[vars]
+FRONTEND_URL = "https://tagledgers.com"

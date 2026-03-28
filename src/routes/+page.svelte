@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { goto } from '$app/navigation';
+	import { getContext } from 'svelte';
+	import type { Writable } from 'svelte/store';
 	import { transactions } from '$lib/stores/transactions';
 	import FilterBar from '$lib/components/FilterBar.svelte';
 	import TransactionTable from '$lib/components/TransactionTable.svelte';
@@ -7,15 +9,15 @@
 	import PnLView from '$lib/components/PnLView.svelte';
 	import FileSelector from '$lib/components/FileSelector.svelte';
 
-	let { data } = $props();
+	const user = getContext<Writable<{ email: string; name: string; picture: string } | null>>('user');
 	let activeTab = $state<'table' | 'pnl'>('table');
 
 	$effect(() => {
-		if (!data.user) goto('/login');
+		if (!$user) goto('/login');
 	});
 </script>
 
-{#if !data.user}
+{#if !$user}
 	<div class="flex items-center justify-center min-h-screen">
 		<p class="text-[var(--text-muted)]">Redirecting to login...</p>
 	</div>

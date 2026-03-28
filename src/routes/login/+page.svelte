@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { page } from '$app/stores';
+	import { apiUrl } from '$lib/api';
 
 	let urlError = $derived($page.url.searchParams.get('error'));
 
@@ -22,7 +23,7 @@
 		{/if}
 
 		<a
-			href="/api/auth/google"
+			href={apiUrl('/api/auth/google')}
 			class="inline-flex items-center gap-3 bg-white text-gray-800 font-medium px-6 py-3 rounded-lg hover:bg-gray-100 transition-colors w-full justify-center"
 		>
 			<svg width="18" height="18" viewBox="0 0 18 18" xmlns="http://www.w3.org/2000/svg">

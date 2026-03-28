@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { transactions, loadedFiles } from '$lib/stores/transactions';
 	import { parseExcelBuffer } from '$lib/parser';
+	import { apiFetch } from '$lib/api';
 
 	interface DriveFileInfo {
 		id: string;
@@ -32,7 +33,7 @@
 		loading = true;
 		error = '';
 		try {
-			const res = await fetch('/api/drive/files');
+			const res = await apiFetch('/api/drive/files');
 			if (!res.ok) throw new Error('Failed to fetch');
 			const data = await res.json();
 			driveFiles = data.files as DriveFileInfo[];
@@ -114,7 +115,7 @@
 				const formData = new FormData();
 				formData.append('file', file);
 				// First folder ID = bank_xlsx_for_ledger
-				const folderRes = await fetch('/api/drive/folders');
+				const folderRes = await apiFetch('/api/drive/folders');
 				let folderId = '';
 				try {
 					const folderData = await folderRes.json();
@@ -123,7 +124,7 @@
 
 				if (folderId) {
 					formData.append('folderId', folderId);
-					const uploadRes = await fetch('/api/drive/upload', { method: 'POST', body: formData });
+					const uploadRes = await apiFetch('/api/drive/upload', { method: 'POST', body: formData });
 					if (uploadRes.ok) {
 						const uploadData = await uploadRes.json();
 						driveFileId = uploadData.id;
@@ -136,7 +137,7 @@
 
 			// Track in DB Ledger
 			try {
-				await fetch('/api/ledger', {
+				await apiFetch('/api/ledger', {
 					method: 'POST',
 					headers: { 'Content-Type': 'application/json' },
 					body: JSON.stringify({
