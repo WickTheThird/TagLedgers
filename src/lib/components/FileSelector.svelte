@@ -233,7 +233,8 @@
 				<div class="px-3 py-2 flex items-center justify-between border-b border-[var(--border)]">
 					<h3 class="text-xs font-semibold text-[var(--text-muted)] uppercase">Google Drive</h3>
 					<div class="flex items-center gap-2">
-						<button onclick={selectAllUnloaded} class="text-xs text-[var(--text-muted)] hover:underline">Select all</button>
+						<button onclick={loadAllFiles} class="text-xs bg-[var(--accent)] text-white px-2 py-0.5 rounded hover:bg-[var(--accent-hover)]">Load all</button>
+						<button onclick={selectAllUnloaded} class="text-xs bg-[var(--orange)] text-white px-2 py-0.5 rounded hover:opacity-80">Select all</button>
 						{#if selected.size > 0}
 							<button onclick={selectNone} class="text-xs text-[var(--text-muted)] hover:underline">None</button>
 						{/if}
