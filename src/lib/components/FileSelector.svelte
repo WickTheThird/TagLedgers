@@ -48,7 +48,7 @@
 		loadingFile = file.id;
 		error = '';
 		try {
-			const res = await fetch(`/api/drive/download/${file.id}`);
+			const res = await apiFetch(`/api/drive/download/${file.id}`);
 			if (!res.ok) throw new Error('Download failed');
 			const buffer = await res.arrayBuffer();
 			const parsed = parseExcelBuffer(buffer, file.name);
