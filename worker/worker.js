@@ -143,12 +143,35 @@ async function handleAuthCallback(request, env) {
 		}, env.SESSION_SECRET);
 
 		console.log('Auth success, redirecting to', env.FRONTEND_URL);
-		// Pass token via hash fragment - not sent to server, not logged, picked up by client JS
-		return new Response(null, {
-			status: 302, headers: {
-				Location: `${env.FRONTEND_URL}/#token=${encodeURIComponent(session)}`,
-				...corsHeaders(env)
-			}
+		// Serve an HTML page from the Worker domain that writes token to the FRONTEND's localStorage
+		// using postMessage, then redirects. This avoids cross-domain localStorage issues.
+		const frontendUrl = env.FRONTEND_URL || 'https://tagledgers.com';
+		const html = `<!DOCTYPE html>
+<html><head><title>Signing in...</title></head>
+<body style="background:#0f1923;color:#ccc;font-family:sans-serif;display:flex;align-items:center;justify-content:center;height:100vh;margin:0">
+<div style="text-align:center">
+<h2>Signing in...</h2>
+<p>Redirecting to TagLedger</p>
+</div>
+<script>
+// Open a hidden iframe on the frontend domain to set localStorage there
+var iframe = document.createElement('iframe');
+iframe.style.display = 'none';
+iframe.src = '${frontendUrl}/?_settoken=1';
+document.body.appendChild(iframe);
+// Wait for iframe to load, then postMessage the token
+iframe.onload = function() {
+  iframe.contentWindow.postMessage({type:'tagledger_token',token:${JSON.stringify(session)}},'${frontendUrl}');
+  // Give it a moment to store, then redirect
+  setTimeout(function(){ window.location.replace('${frontendUrl}/'); }, 500);
+};
+// Fallback: redirect with token in query after 2s
+setTimeout(function(){ window.location.replace('${frontendUrl}/?token=' + encodeURIComponent(${JSON.stringify(session)})); }, 2000);
+</script>
+</body></html>`;
+		return new Response(html, {
+			status: 200,
+			headers: { 'Content-Type': 'text/html' }
 		});
 	} catch (e) {
 		console.error('Auth callback exception:', e.message || e);
