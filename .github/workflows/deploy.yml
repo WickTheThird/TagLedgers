@@ -25,7 +25,7 @@ jobs:
       - run: npm ci
       - run: npm run build
         env:
-          VITE_API_URL: https://api.tagledgers.com
+          VITE_API_URL: https://tagledgers.bumbufilip22.workers.dev
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build
