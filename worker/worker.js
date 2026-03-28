@@ -1,7 +1,7 @@
 // TagLedger Cloudflare Worker - API Backend
 const CORS_HEADERS = {
 	'Access-Control-Allow-Credentials': 'true',
-	'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+	'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
 	'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
