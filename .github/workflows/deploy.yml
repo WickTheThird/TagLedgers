@@ -26,6 +26,7 @@ jobs:
       - run: npm run build
         env:
           VITE_API_URL: https://tagledgers.bumbufilip22.workers.dev
+      - run: cp build/index.html build/404.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build
