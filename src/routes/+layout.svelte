@@ -50,7 +50,21 @@
 	});
 
 	import { setContext } from 'svelte';
+	import { displayCurrency, detectedCurrencies, fetchExchangeRates, getCurrencySymbol } from '$lib/stores/currency';
+	import { transactions } from '$lib/stores/transactions';
+
 	setContext('user', user);
+
+	// Auto-detect currencies from loaded transactions
+	$effect(() => {
+		const currencies = [...new Set($transactions.map(t => t.currency.toUpperCase()))].filter(Boolean).sort();
+		if (currencies.length) detectedCurrencies.set(currencies);
+	});
+
+	// Fetch exchange rates on load
+	onMount(async () => {
+		await fetchExchangeRates('EUR');
+	});
 </script>
 
 <svelte:head>
@@ -64,6 +78,28 @@
 				<h1 class="text-base sm:text-lg font-semibold text-[var(--text-primary)]">TagLedger</h1>
 			</div>
 			<div class="flex items-center gap-2 sm:gap-3">
+				<select
+					bind:value={$displayCurrency}
+					onchange={() => fetchExchangeRates($displayCurrency)}
+					class="bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] text-xs rounded px-1.5 py-1 outline-none focus:border-[var(--accent)]"
+					title="Display currency"
+				>
+					{#each $detectedCurrencies as cur}
+						<option value={cur}>{getCurrencySymbol(cur)} {cur}</option>
+					{/each}
+					{#if !$detectedCurrencies.includes('EUR')}
+						<option value="EUR">€ EUR</option>
+					{/if}
+					{#if !$detectedCurrencies.includes('USD')}
+						<option value="USD">$ USD</option>
+					{/if}
+					{#if !$detectedCurrencies.includes('GBP')}
+						<option value="GBP">£ GBP</option>
+					{/if}
+					{#if !$detectedCurrencies.includes('RON')}
+						<option value="RON">lei RON</option>
+					{/if}
+				</select>
 				<span class="hidden sm:inline text-sm text-[var(--text-secondary)]">{$user.email}</span>
 				{#if $user.picture}
 					<img src={$user.picture} alt="" class="w-7 h-7 rounded-full" referrerpolicy="no-referrer" />

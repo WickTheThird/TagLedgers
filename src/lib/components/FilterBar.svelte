@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { filters, availableAccounts, availableTags, availableSheets, totalStats } from '$lib/stores/transactions';
 	import FilterPopup from './FilterPopup.svelte';
+	import { displayCurrency, formatWithCurrency } from '$lib/stores/currency';
 
 	let activePopup = $state<string | null>(null);
 
@@ -30,6 +31,50 @@
 		$filters.tags.length || $filters.types.length || $filters.sheets.length || $filters.search
 	);
 
+	let activeDatePreset = $state<string>('');
+
+	function setDatePreset(preset: string) {
+		const now = new Date();
+		const y = now.getFullYear();
+		const m = now.getMonth();
+		let from = '', to = '';
+
+		switch (preset) {
+			case 'thisMonth':
+				from = `${y}-${String(m + 1).padStart(2, '0')}-01`;
+				to = new Date(y, m + 1, 0).toISOString().split('T')[0];
+				break;
+			case 'lastMonth': {
+				const lm = m === 0 ? 11 : m - 1;
+				const ly = m === 0 ? y - 1 : y;
+				from = `${ly}-${String(lm + 1).padStart(2, '0')}-01`;
+				to = new Date(ly, lm + 1, 0).toISOString().split('T')[0];
+				break;
+			}
+			case 'thisQuarter': {
+				const qStart = Math.floor(m / 3) * 3;
+				from = `${y}-${String(qStart + 1).padStart(2, '0')}-01`;
+				to = new Date(y, qStart + 3, 0).toISOString().split('T')[0];
+				break;
+			}
+			case 'thisYear':
+				from = `${y}-01-01`;
+				to = `${y}-12-31`;
+				break;
+			case 'lastYear':
+				from = `${y - 1}-01-01`;
+				to = `${y - 1}-12-31`;
+				break;
+			case 'all':
+				from = '';
+				to = '';
+				break;
+		}
+		$filters.dateFrom = from;
+		$filters.dateTo = to;
+		activeDatePreset = preset;
+	}
+
 	function formatCurrency(n: number) {
 		return n.toLocaleString('en-IE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 	}
@@ -46,19 +91,75 @@
 
 <div class="bg-[var(--bg-secondary)] border-b border-[var(--border)] px-3 sm:px-4 py-2 sm:py-3">
 	<div class="flex items-center gap-2 flex-wrap">
-		<!-- Date filters -->
-		<div class="flex items-center gap-1 flex-wrap">
-			<input
-				type="date"
-				bind:value={$filters.dateFrom}
-				class="bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] text-sm rounded px-2 py-1.5 focus:border-[var(--accent)] outline-none"
-			/>
-			<span class="text-[var(--text-muted)] text-sm">to</span>
-			<input
-				type="date"
-				bind:value={$filters.dateTo}
-				class="bg-[var(--bg-tertiary)] border border-[var(--border)] text-[var(--text-primary)] text-sm rounded px-2 py-1.5 focus:border-[var(--accent)] outline-none"
-			/>
+		<!-- Date filter -->
+		<div class="relative filter-popup-container">
+			<button
+				onclick={() => togglePopup('dates')}
+				class="bg-[var(--bg-tertiary)] border border-[var(--border)] text-sm rounded px-3 py-1.5 hover:border-[var(--accent)] transition-colors"
+				class:border-[var(--accent)]={$filters.dateFrom || $filters.dateTo}
+				class:text-[var(--accent)]={$filters.dateFrom || $filters.dateTo}
+			>
+				{#if $filters.dateFrom && $filters.dateTo}
+					{$filters.dateFrom} — {$filters.dateTo}
+				{:else if $filters.dateFrom}
+					From {$filters.dateFrom}
+				{:else if $filters.dateTo}
+					Until {$filters.dateTo}
+				{:else}
+					Date range
+				{/if}
+			</button>
+			{#if activePopup === 'dates'}
+				<div class="absolute top-full left-0 mt-1 bg-[var(--bg-tertiary)] border border-[var(--border)] rounded-lg shadow-xl z-50 p-3 min-w-[280px]">
+					<div class="grid grid-cols-3 gap-1 mb-3">
+						{#each [
+							{ key: 'thisMonth', label: 'This Month' },
+							{ key: 'lastMonth', label: 'Last Month' },
+							{ key: 'thisQuarter', label: 'This Quarter' },
+							{ key: 'thisYear', label: 'This Year' },
+							{ key: 'lastYear', label: 'Last Year' },
+							{ key: 'all', label: 'All Time' },
+						] as { key, label }}
+							<button
+								onclick={() => { setDatePreset(key); activePopup = null; }}
+								class="text-xs px-2 py-1.5 rounded transition-colors {activeDatePreset === key ? 'bg-[var(--accent)] text-white' : 'bg-[var(--bg-secondary)] text-[var(--text-secondary)] hover:bg-[var(--bg-primary)] hover:text-[var(--text-primary)]'}"
+							>
+								{label}
+							</button>
+						{/each}
+					</div>
+					<div class="border-t border-[var(--border)] pt-2">
+						<div class="flex items-center gap-2">
+							<div class="flex-1">
+								<label class="text-[10px] text-[var(--text-muted)] block mb-0.5">From</label>
+								<input
+									type="date"
+									bind:value={$filters.dateFrom}
+									onchange={() => { activeDatePreset = ''; }}
+									class="w-full bg-[var(--bg-primary)] border border-[var(--border)] text-[var(--text-primary)] text-xs rounded px-2 py-1 focus:border-[var(--accent)] outline-none"
+								/>
+							</div>
+							<div class="flex-1">
+								<label class="text-[10px] text-[var(--text-muted)] block mb-0.5">To</label>
+								<input
+									type="date"
+									bind:value={$filters.dateTo}
+									onchange={() => { activeDatePreset = ''; }}
+									class="w-full bg-[var(--bg-primary)] border border-[var(--border)] text-[var(--text-primary)] text-xs rounded px-2 py-1 focus:border-[var(--accent)] outline-none"
+								/>
+							</div>
+						</div>
+					</div>
+					{#if $filters.dateFrom || $filters.dateTo}
+						<button
+							onclick={() => { $filters.dateFrom = ''; $filters.dateTo = ''; activeDatePreset = ''; activePopup = null; }}
+							class="text-xs text-[var(--text-muted)] hover:text-[var(--red)] mt-2 transition-colors"
+						>
+							Clear dates
+						</button>
+					{/if}
+				</div>
+			{/if}
 		</div>
 
 		<!-- Account filter -->
@@ -187,10 +288,10 @@
 	<!-- Stats bar -->
 	<div class="flex items-center flex-wrap gap-2 sm:gap-6 mt-2 text-[10px] sm:text-xs text-[var(--text-muted)]">
 		<span>{$totalStats.count} transactions</span>
-		<span class="text-[var(--green)]">Credit: {formatCurrency($totalStats.totalCredit)}</span>
-		<span class="text-[var(--red)]">Debit: {formatCurrency($totalStats.totalDebit)}</span>
+		<span class="text-[var(--green)]">Credit: {formatWithCurrency($totalStats.totalCredit, $displayCurrency)}</span>
+		<span class="text-[var(--red)]">Debit: {formatWithCurrency($totalStats.totalDebit, $displayCurrency)}</span>
 		<span class:text-[var(--green)]={$totalStats.net >= 0} class:text-[var(--red)]={$totalStats.net < 0}>
-			Net: {formatCurrency($totalStats.net)}
+			Net: {formatWithCurrency($totalStats.net, $displayCurrency)}
 		</span>
 	</div>
 </div>

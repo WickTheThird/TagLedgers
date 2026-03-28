@@ -249,6 +249,8 @@ async function handleDriveUpload(request, env) {
 async function handleLedgerGet(request, env) {
 	const cookie = getSessionToken(request);
 	if (!cookie) return jsonResponse({ error: 'Not authenticated' }, 401, env);
+	const session = await decryptSession(cookie, env.SESSION_SECRET);
+	if (!session) return jsonResponse({ error: 'Not authenticated' }, 401, env);
 
 	const sheetId = env.DB_LEDGER_SHEET_ID;
 	if (!sheetId) return jsonResponse({ entries: [] }, 200, env);
@@ -262,11 +264,13 @@ async function handleLedgerGet(request, env) {
 	const rows = data.values || [];
 	if (rows.length < 2) return jsonResponse({ entries: [] }, 200, env);
 
-	const entries = rows.slice(1).map(row => ({
+	const allEntries = rows.slice(1).map(row => ({
 		fileName: row[0] || '', driveFileId: row[1] || '', driveLink: row[2] || '',
 		folder: row[3] || '', uploadedBy: row[4] || '', uploadedAt: row[5] || '',
 		sheetCount: parseInt(row[6] || '0'), transactionCount: parseInt(row[7] || '0')
 	}));
+	// Filter: each user only sees their own uploads
+	const entries = allEntries.filter(e => e.uploadedBy.toLowerCase() === session.email.toLowerCase());
 	return jsonResponse({ entries }, 200, env);
 }
 
@@ -282,13 +286,14 @@ async function handleLedgerPost(request, env) {
 	const entry = await request.json();
 	const token = await getServiceToken(env);
 
-	const checkRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A:D`, {
+	const checkRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A:E`, {
 		headers: { Authorization: `Bearer ${token}` }
 	});
 	if (checkRes.ok) {
 		const checkData = await checkRes.json();
 		const rows = checkData.values || [];
-		if (rows.some(r => r[0] === entry.fileName && r[3] === entry.folder)) {
+		// Check duplicate per user: same file name + folder + uploader
+		if (rows.some(r => r[0] === entry.fileName && r[3] === entry.folder && (r[4] || '').toLowerCase() === session.email.toLowerCase())) {
 			return jsonResponse({ success: true, duplicate: true }, 200, env);
 		}
 		if (rows.length === 0) {

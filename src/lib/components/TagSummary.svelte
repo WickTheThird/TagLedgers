@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { tagSummaries, totalStats } from '$lib/stores/transactions';
+	import { displayCurrency, formatWithCurrency } from '$lib/stores/currency';
 
 	let sortCol = $state<'tag' | 'totalDebit' | 'totalCredit' | 'net' | 'count'>('net');
 	let sortDir = $state<'asc' | 'desc'>('desc');
@@ -24,7 +25,7 @@
 	}
 
 	function fmt(n: number) {
-		return n.toLocaleString('en-IE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		return formatWithCurrency(n, $displayCurrency);
 	}
 
 	function startDrag(e: MouseEvent) {

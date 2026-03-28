@@ -1,5 +1,6 @@
 import { writable, derived } from 'svelte/store';
 import type { Transaction, FilterState, TagSummary, PnLGroup, AutoTagRule } from '../types';
+import { displayCurrency, exchangeRates, convertAmount } from './currency';
 
 export const transactions = writable<Transaction[]>([]);
 export const autoTagRules = writable<AutoTagRule[]>([]);
@@ -79,7 +80,9 @@ export const filteredTransactions = derived(
 	}
 );
 
-export const tagSummaries = derived(filteredTransactions, ($filtered) => {
+export const tagSummaries = derived(
+	[filteredTransactions, displayCurrency, exchangeRates],
+	([$filtered, $displayCurrency, $rates]) => {
 	const map = new Map<string, TagSummary>();
 	for (const t of $filtered) {
 		let s = map.get(t.tag);
@@ -87,15 +90,17 @@ export const tagSummaries = derived(filteredTransactions, ($filtered) => {
 			s = { tag: t.tag, totalDebit: 0, totalCredit: 0, net: 0, count: 0 };
 			map.set(t.tag, s);
 		}
-		if (t.debit) s.totalDebit += t.debit;
-		if (t.credit) s.totalCredit += t.credit;
+		if (t.debit) s.totalDebit += convertAmount(t.debit, t.currency, $displayCurrency, $rates);
+		if (t.credit) s.totalCredit += convertAmount(t.credit, t.currency, $displayCurrency, $rates);
 		s.net = s.totalCredit - s.totalDebit;
 		s.count++;
 	}
 	return [...map.values()].sort((a, b) => Math.abs(b.net) - Math.abs(a.net));
 });
 
-export const pnlData = derived(filteredTransactions, ($filtered) => {
+export const pnlData = derived(
+	[filteredTransactions, displayCurrency, exchangeRates],
+	([$filtered, $displayCurrency, $rates]) => {
 	const groups = new Map<string, { revenue: Map<string, { amount: number; count: number }>; expenses: Map<string, { amount: number; count: number }> }>();
 
 	for (const t of $filtered) {
@@ -107,12 +112,12 @@ export const pnlData = derived(filteredTransactions, ($filtered) => {
 
 		if (t.type === 'Credit' && t.credit) {
 			const existing = g.revenue.get(t.tag) ?? { amount: 0, count: 0 };
-			existing.amount += t.credit;
+			existing.amount += convertAmount(t.credit, t.currency, $displayCurrency, $rates);
 			existing.count++;
 			g.revenue.set(t.tag, existing);
 		} else if (t.type === 'Debit' && t.debit) {
 			const existing = g.expenses.get(t.tag) ?? { amount: 0, count: 0 };
-			existing.amount += t.debit;
+			existing.amount += convertAmount(t.debit, t.currency, $displayCurrency, $rates);
 			existing.count++;
 			g.expenses.set(t.tag, existing);
 		}
@@ -141,12 +146,14 @@ export const availableTags = derived(transactions, ($t) => [...new Set($t.map(t 
 export const availableYears = derived(transactions, ($t) => [...new Set($t.map(t => t.year))].sort());
 export const availableSheets = derived(transactions, ($t) => [...new Set($t.map(t => t.sourceSheet))].sort());
 
-export const totalStats = derived(filteredTransactions, ($filtered) => {
+export const totalStats = derived(
+	[filteredTransactions, displayCurrency, exchangeRates],
+	([$filtered, $displayCurrency, $rates]) => {
 	let totalDebit = 0;
 	let totalCredit = 0;
 	for (const t of $filtered) {
-		if (t.debit) totalDebit += t.debit;
-		if (t.credit) totalCredit += t.credit;
+		if (t.debit) totalDebit += convertAmount(t.debit, t.currency, $displayCurrency, $rates);
+		if (t.credit) totalCredit += convertAmount(t.credit, t.currency, $displayCurrency, $rates);
 	}
 	return { totalDebit, totalCredit, net: totalCredit - totalDebit, count: $filtered.length };
 });

@@ -1,5 +1,6 @@
 <script lang="ts">
 	import { pnlData } from '$lib/stores/transactions';
+	import { displayCurrency, formatWithCurrency } from '$lib/stores/currency';
 
 	let expandedGroups = $state<Set<string>>(new Set());
 	let expandedSections = $state<Set<string>>(new Set());
@@ -32,7 +33,7 @@
 	}
 
 	function fmt(n: number) {
-		return n.toLocaleString('en-IE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+		return formatWithCurrency(n, $displayCurrency);
 	}
 
 	let consolidatedPnl = $derived(() => {

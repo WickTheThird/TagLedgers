@@ -2,6 +2,7 @@
 	import { filteredTransactions, availableTags, updateTransactionTag, addTransaction, deleteTransaction, fileSheetMap } from '$lib/stores/transactions';
 	import { apiFetch } from '$lib/api';
 	import type { Transaction } from '$lib/types';
+	import { displayCurrency, getCurrencySymbol } from '$lib/stores/currency';
 	import * as XLSX from 'xlsx';
 
 	let sortCol = $state<keyof Transaction>('date');
@@ -246,14 +247,14 @@
 		}
 	}
 
-	const columns: { key: keyof Transaction; label: string }[] = [
+	const columns: { key: keyof Transaction; label: string; hideMobile?: boolean }[] = [
 		{ key: 'date', label: 'Date' },
 		{ key: 'description', label: 'Description' },
 		{ key: 'tag', label: 'Tag' },
 		{ key: 'debit', label: 'Debit' },
 		{ key: 'credit', label: 'Credit' },
-		{ key: 'balance', label: 'Balance' },
-		{ key: 'account', label: 'Account' }
+		{ key: 'balance', label: 'Balance', hideMobile: true },
+		{ key: 'account', label: 'Account', hideMobile: true }
 	];
 </script>
 
@@ -330,13 +331,13 @@
 		</div>
 	{/if}
 
-	<table class="w-full text-sm">
+	<table class="w-full text-sm min-w-[700px]">
 		<thead class="sticky top-0 bg-[var(--bg-secondary)] z-10">
 			<tr>
 				<th class="w-[30px] px-1"></th>
 				{#each columns as col}
 					<th
-						class="text-left px-3 py-2 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider cursor-pointer hover:text-[var(--text-primary)] border-b border-[var(--border)] select-none"
+						class="text-left px-3 py-2 text-xs font-medium text-[var(--text-muted)] uppercase tracking-wider cursor-pointer hover:text-[var(--text-primary)] border-b border-[var(--border)] select-none {col.hideMobile ? 'hidden sm:table-cell' : ''}"
 						onclick={() => toggleSort(col.key)}
 					>
 						{col.label}
@@ -389,8 +390,8 @@
 					</td>
 					<td class="px-3 py-1.5 text-right text-[var(--red)] font-mono">{formatAmount(tx.debit)}</td>
 					<td class="px-3 py-1.5 text-right text-[var(--green)] font-mono">{formatAmount(tx.credit)}</td>
-					<td class="px-3 py-1.5 text-right font-mono text-[var(--text-secondary)]">{formatAmount(tx.balance)}</td>
-					<td class="px-3 py-1.5 text-xs text-[var(--text-muted)]">{tx.account}</td>
+					<td class="px-3 py-1.5 text-right font-mono text-[var(--text-secondary)] hidden sm:table-cell">{formatAmount(tx.balance)}</td>
+					<td class="px-3 py-1.5 text-xs text-[var(--text-muted)] hidden sm:table-cell">{tx.account}</td>
 				</tr>
 			{/each}
 		</tbody>
