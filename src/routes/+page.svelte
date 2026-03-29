@@ -2,7 +2,7 @@
 	import { goto } from '$app/navigation';
 	import { getContext } from 'svelte';
 	import type { Writable } from 'svelte/store';
-	import { transactions, filteredTransactions } from '$lib/stores/transactions';
+	import { transactions, filteredTransactions, runTransferDetection } from '$lib/stores/transactions';
 	import FilterBar from '$lib/components/FilterBar.svelte';
 	import TransactionTable from '$lib/components/TransactionTable.svelte';
 	import TagSummary from '$lib/components/TagSummary.svelte';
@@ -15,6 +15,13 @@
 
 	$effect(() => {
 		if (!$user) goto('/login');
+	});
+
+	// Run transfer detection whenever transactions change
+	$effect(() => {
+		if ($transactions.length > 0) {
+			runTransferDetection($transactions);
+		}
 	});
 
 	function exportFiltered() {

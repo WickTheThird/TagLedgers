@@ -24,6 +24,18 @@ export interface FilterState {
 	types: ('Credit' | 'Debit')[];
 	sheets: string[];
 	search: string;
+	hideTransfers: boolean;
+}
+
+export interface TransferMatch {
+	id: string;
+	debitTxId: string;
+	creditTxId: string;
+	amount: number;
+	currency: string;
+	score: number;
+	confidence: 'high' | 'medium';
+	status: 'auto' | 'confirmed' | 'rejected';
 }
 
 export interface TagSummary {

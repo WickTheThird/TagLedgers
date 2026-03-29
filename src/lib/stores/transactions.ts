@@ -1,6 +1,7 @@
 import { writable, derived } from 'svelte/store';
-import type { Transaction, FilterState, TagSummary, PnLGroup, AutoTagRule } from '../types';
+import type { Transaction, FilterState, TagSummary, PnLGroup, AutoTagRule, TransferMatch } from '../types';
 import { displayCurrency, exchangeRates, convertAmount } from './currency';
+import { detectInterAccountTransfers } from '../transferDetection';
 
 export const transactions = writable<Transaction[]>([]);
 export const autoTagRules = writable<AutoTagRule[]>([]);
@@ -53,13 +54,57 @@ export const filters = writable<FilterState>({
 	tags: [],
 	types: [],
 	sheets: [],
-	search: ''
+	search: '',
+	hideTransfers: false
 });
 
+// --- Transfer Detection ---
+export const transferMatches = writable<TransferMatch[]>([]);
+
+export const excludedTransferIds = derived(transferMatches, ($matches) => {
+	const ids = new Set<string>();
+	for (const m of $matches) {
+		if (m.status !== 'rejected' && (m.confidence === 'high' || m.status === 'confirmed')) {
+			ids.add(m.debitTxId);
+			ids.add(m.creditTxId);
+		}
+	}
+	return ids;
+});
+
+export const transferMatchByTxId = derived(transferMatches, ($matches) => {
+	const map = new Map<string, TransferMatch>();
+	for (const m of $matches) {
+		if (m.status !== 'rejected') {
+			map.set(m.debitTxId, m);
+			map.set(m.creditTxId, m);
+		}
+	}
+	return map;
+});
+
+export function runTransferDetection(txs: Transaction[]) {
+	const matches = detectInterAccountTransfers(txs);
+	transferMatches.set(matches);
+}
+
+export function confirmTransferMatch(matchId: string) {
+	transferMatches.update(ms => ms.map(m =>
+		m.id === matchId ? { ...m, status: 'confirmed' as const } : m
+	));
+}
+
+export function rejectTransferMatch(matchId: string) {
+	transferMatches.update(ms => ms.map(m =>
+		m.id === matchId ? { ...m, status: 'rejected' as const } : m
+	));
+}
+
 export const filteredTransactions = derived(
-	[transactions, filters],
-	([$transactions, $filters]) => {
+	[transactions, filters, excludedTransferIds],
+	([$transactions, $filters, $excludedIds]) => {
 		return $transactions.filter(t => {
+			if ($filters.hideTransfers && $excludedIds.has(t.id)) return false;
 			if ($filters.dateFrom && t.date < new Date($filters.dateFrom)) return false;
 			if ($filters.dateTo && t.date > new Date($filters.dateTo + 'T23:59:59')) return false;
 			if ($filters.accounts.length && !$filters.accounts.includes(t.account)) return false;

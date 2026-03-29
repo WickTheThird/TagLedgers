@@ -1,7 +1,7 @@
 <script lang="ts">
-	import { filters, availableAccounts, availableTags, availableSheets, totalStats } from '$lib/stores/transactions';
+	import { filters, availableAccounts, availableTags, availableSheets, totalStats, transferMatches } from '$lib/stores/transactions';
 	import FilterPopup from './FilterPopup.svelte';
-	import { displayCurrency, formatWithCurrency } from '$lib/stores/currency';
+	import { displayCurrency, formatWithCurrency, convertAmount, exchangeRates } from '$lib/stores/currency';
 
 	let activePopup = $state<string | null>(null);
 
@@ -10,8 +10,15 @@
 	}
 
 	function clearFilters() {
-		$filters = { dateFrom: '', dateTo: '', accounts: [], tags: [], types: [], sheets: [], search: '' };
+		$filters = { dateFrom: '', dateTo: '', accounts: [], tags: [], types: [], sheets: [], search: '', hideTransfers: $filters.hideTransfers };
 	}
+
+	let activeMatches = $derived($transferMatches.filter(m => m.status !== 'rejected'));
+	let highConfMatches = $derived(activeMatches.filter(m => m.confidence === 'high' || m.status === 'confirmed'));
+	let suggestedMatches = $derived(activeMatches.filter(m => m.confidence === 'medium' && m.status === 'auto'));
+	let transferTotal = $derived(
+		highConfMatches.reduce((sum, m) => sum + convertAmount(m.amount, m.currency, $displayCurrency, $exchangeRates), 0)
+	);
 
 	function removeAccount(acc: string) {
 		$filters.accounts = $filters.accounts.filter(a => a !== acc);
@@ -238,6 +245,20 @@
 			{/if}
 		</div>
 
+		<!-- Transfer toggle -->
+		{#if activeMatches.length > 0}
+			<button
+				onclick={() => { $filters.hideTransfers = !$filters.hideTransfers; }}
+				class="bg-[var(--bg-tertiary)] border text-sm rounded px-3 py-1.5 transition-colors"
+				class:border-cyan-500={$filters.hideTransfers}
+				class:text-cyan-400={$filters.hideTransfers}
+				class:border-[var(--border)]={!$filters.hideTransfers}
+				title={$filters.hideTransfers ? 'Transfers excluded from calculations' : 'Click to exclude inter-account transfers'}
+			>
+				Transfers ({activeMatches.length}){suggestedMatches.length ? ` · ${suggestedMatches.length} to review` : ''}
+			</button>
+		{/if}
+
 		<!-- Search -->
 		<input
 			type="text"
@@ -293,5 +314,10 @@
 		<span class:text-[var(--green)]={$totalStats.net >= 0} class:text-[var(--red)]={$totalStats.net < 0}>
 			Net: {formatWithCurrency($totalStats.net, $displayCurrency)}
 		</span>
+		{#if activeMatches.length > 0}
+			<span class="text-cyan-400">
+				{activeMatches.length} transfers{$filters.hideTransfers ? ` (${formatWithCurrency(transferTotal, $displayCurrency)} excluded)` : ''}
+			</span>
+		{/if}
 	</div>
 </div>

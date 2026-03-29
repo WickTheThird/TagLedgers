@@ -1,5 +1,5 @@
 <script lang="ts">
-	import { filteredTransactions, availableTags, updateTransactionTag, addTransaction, deleteTransaction, fileSheetMap } from '$lib/stores/transactions';
+	import { filteredTransactions, availableTags, updateTransactionTag, addTransaction, deleteTransaction, fileSheetMap, transferMatchByTxId, transactions, confirmTransferMatch, rejectTransferMatch } from '$lib/stores/transactions';
 	import { apiFetch } from '$lib/api';
 	import type { Transaction } from '$lib/types';
 	import { displayCurrency, getCurrencySymbol, exchangeRates, convertAmount } from '$lib/stores/currency';
@@ -351,9 +351,27 @@
 		</thead>
 		<tbody>
 			{#each sorted() as tx (tx.id)}
-				<tr class="hover:bg-[var(--bg-hover)] border-b border-[var(--border)]/50 transition-colors group">
+				{@const match = $transferMatchByTxId.get(tx.id)}
+				<tr
+					class="hover:bg-[var(--bg-hover)] border-b border-[var(--border)]/50 transition-colors group {match && match.confidence === 'high' && match.status !== 'rejected' ? 'bg-cyan-500/5' : ''} {match && match.confidence === 'medium' && match.status === 'auto' ? 'bg-yellow-500/5' : ''}"
+				>
 					<td class="px-1 py-1.5 text-center">
-						{#if tx.id.startsWith('manual-')}
+						{#if match && match.status !== 'rejected'}
+							{@const counterpartId = match.debitTxId === tx.id ? match.creditTxId : match.debitTxId}
+							{@const counterpart = $transactions.find(t => t.id === counterpartId)}
+							<span
+								class="inline-flex items-center gap-0.5 cursor-help"
+								title="{match.confidence === 'high' ? 'Auto-matched' : 'Suggested'} transfer ({match.score}/100): {counterpart?.account ?? '?'} — {counterpart?.description?.slice(0, 40) ?? '?'}"
+							>
+								<span class="text-cyan-400 text-xs">⇄</span>
+								{#if match.confidence === 'medium' && match.status === 'auto'}
+									<button onclick={() => confirmTransferMatch(match.id)} class="text-green-400 text-[10px] hover:text-green-300" title="Confirm match">✓</button>
+									<button onclick={() => rejectTransferMatch(match.id)} class="text-red-400 text-[10px] hover:text-red-300" title="Reject match">✗</button>
+								{:else if match.status === 'confirmed'}
+									<span class="text-green-400 text-[10px]" title="Confirmed">✓</span>
+								{/if}
+							</span>
+						{:else if tx.id.startsWith('manual-')}
 							<button
 								class="text-red-500/50 hover:text-red-500 text-xs sm:opacity-0 sm:group-hover:opacity-100 transition-opacity"
 								onclick={() => handleDelete(tx.id)}
