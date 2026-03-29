@@ -25,7 +25,7 @@ export interface FilterState {
 	types: ('Credit' | 'Debit')[];
 	sheets: string[];
 	search: string;
-	hideTransfers: boolean;
+	transferFilter: 'all' | 'only' | 'exclude';
 }
 
 export interface TransferMatch {

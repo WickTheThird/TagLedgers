@@ -10,7 +10,12 @@
 	}
 
 	function clearFilters() {
-		$filters = { dateFrom: '', dateTo: '', accounts: [], tags: [], types: [], sheets: [], search: '', hideTransfers: $filters.hideTransfers };
+		$filters = { dateFrom: '', dateTo: '', accounts: [], tags: [], types: [], sheets: [], search: '', transferFilter: $filters.transferFilter };
+	}
+
+	function cycleTransferFilter() {
+		const cycle = { all: 'only', only: 'exclude', exclude: 'all' } as const;
+		$filters.transferFilter = cycle[$filters.transferFilter];
 	}
 
 	let activeMatches = $derived($transferMatches.filter(m => m.status !== 'rejected'));
@@ -245,17 +250,30 @@
 			{/if}
 		</div>
 
-		<!-- Transfer toggle -->
+		<!-- Transfer filter (cycles: all → only → exclude → all) -->
 		{#if activeMatches.length > 0}
 			<button
-				onclick={() => { $filters.hideTransfers = !$filters.hideTransfers; }}
+				onclick={cycleTransferFilter}
 				class="bg-[var(--bg-tertiary)] border text-sm rounded px-3 py-1.5 transition-colors"
-				class:border-cyan-500={$filters.hideTransfers}
-				class:text-cyan-400={$filters.hideTransfers}
-				class:border-[var(--border)]={!$filters.hideTransfers}
-				title={$filters.hideTransfers ? 'Transfers excluded from calculations' : 'Click to exclude inter-account transfers'}
+				class:border-cyan-500={$filters.transferFilter !== 'all'}
+				class:text-cyan-400={$filters.transferFilter !== 'all'}
+				class:border-[var(--border)]={$filters.transferFilter === 'all'}
+				title={
+					$filters.transferFilter === 'all' ? 'Click to show only transfers' :
+					$filters.transferFilter === 'only' ? 'Click to exclude transfers from P&L' :
+					'Click to show all transactions'
+				}
 			>
-				Transfers ({activeMatches.length}){suggestedMatches.length ? ` · ${suggestedMatches.length} to review` : ''}
+				{#if $filters.transferFilter === 'only'}
+					Showing Transfers ({activeMatches.length})
+				{:else if $filters.transferFilter === 'exclude'}
+					Transfers Excluded ({activeMatches.length})
+				{:else}
+					Transfers ({activeMatches.length})
+				{/if}
+				{#if suggestedMatches.length && $filters.transferFilter === 'all'}
+					 · {suggestedMatches.length} to review
+				{/if}
 			</button>
 		{/if}
 
@@ -316,7 +334,9 @@
 		</span>
 		{#if activeMatches.length > 0}
 			<span class="text-cyan-400">
-				{activeMatches.length} transfers{$filters.hideTransfers ? ` (${formatWithCurrency(transferTotal, $displayCurrency)} excluded)` : ''}
+				{activeMatches.length} transfers ({formatWithCurrency(transferTotal, $displayCurrency)})
+				{#if $filters.transferFilter === 'exclude'} — excluded{/if}
+				{#if $filters.transferFilter === 'only'} — showing{/if}
 			</span>
 		{/if}
 	</div>

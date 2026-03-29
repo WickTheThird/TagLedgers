@@ -55,7 +55,7 @@ export const filters = writable<FilterState>({
 	types: [],
 	sheets: [],
 	search: '',
-	hideTransfers: false
+	transferFilter: 'all' as const
 });
 
 // --- Transfer Detection ---
@@ -104,7 +104,9 @@ export const filteredTransactions = derived(
 	[transactions, filters, excludedTransferIds],
 	([$transactions, $filters, $excludedIds]) => {
 		return $transactions.filter(t => {
-			if ($filters.hideTransfers && $excludedIds.has(t.id)) return false;
+			// Transfer filter: 'only' shows only transfers, 'exclude' hides them
+			if ($filters.transferFilter === 'only' && !$excludedIds.has(t.id)) return false;
+			if ($filters.transferFilter === 'exclude' && $excludedIds.has(t.id)) return false;
 			if ($filters.dateFrom && t.date < new Date($filters.dateFrom)) return false;
 			if ($filters.dateTo && t.date > new Date($filters.dateTo + 'T23:59:59')) return false;
 			if ($filters.accounts.length && !$filters.accounts.includes(t.account)) return false;

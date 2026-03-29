@@ -159,15 +159,14 @@ export function detectInterAccountTransfers(txs: Transaction[]): TransferMatch[]
 
 		if (debits.length === 0 || credits.length === 0) continue;
 
-		// First pass: count account pair frequency for pair scoring
 		const pairCounts = new Map<string, number>();
+		const currencyCandidates: ScoredCandidate[] = [];
 
 		// Generate all candidate pairs with hard filters + scoring
 		for (const d of debits) {
 			for (const c of credits) {
 				// Hard filters
 				if (d.account === c.account) continue;
-				if (d.currency.toUpperCase() !== c.currency.toUpperCase()) continue;
 
 				const amountScore = scoreAmount(d.debit!, c.credit!);
 				if (amountScore < 0) continue;
@@ -187,21 +186,23 @@ export function detectInterAccountTransfers(txs: Transaction[]): TransferMatch[]
 				const pairKey = [d.account, c.account].sort().join('|');
 				pairCounts.set(pairKey, (pairCounts.get(pairKey) ?? 0) + 1);
 
-				allCandidates.push({
+				currencyCandidates.push({
 					debit: d, credit: c,
-					score: 0, // calculated after pair counting
+					score: 0,
 					amountScore, dateScore, descScore, pairScore: 0
 				});
 			}
 		}
 
-		// Second pass: add pair frequency scores
-		for (const cand of allCandidates) {
+		// Second pass: add pair frequency scores (scoped to this currency group)
+		for (const cand of currencyCandidates) {
 			cand.pairScore = scoreAccountPairFrequency(
 				cand.debit.account, cand.credit.account, pairCounts
 			);
 			cand.score = cand.amountScore + cand.dateScore + cand.descScore + cand.pairScore;
 		}
+
+		allCandidates.push(...currencyCandidates);
 	}
 
 	// One-to-one assignment: sort by score desc, assign top-down
