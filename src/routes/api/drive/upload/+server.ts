@@ -21,8 +21,8 @@ export const POST: RequestHandler = async ({ cookies, request }) => {
 		return json(result);
 	} catch (e) {
 		const msg = e instanceof Error ? e.message : 'Unknown error';
-		if (msg.includes('Not authenticated') || msg.includes('No refresh token')) {
-			return json({ error: 'Not authenticated' }, { status: 401 });
+		if (msg.includes('Not authenticated') || msg.includes('No refresh token') || msg.includes('insufficient authentication scopes')) {
+			return json({ error: 'Please log out and log back in' }, { status: 401 });
 		}
 		console.error('Drive upload error:', e);
 		return json({ error: 'Failed to upload file' }, { status: 500 });
