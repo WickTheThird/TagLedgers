@@ -36,5 +36,10 @@
 		</a>
 
 		<p class="text-xs text-[var(--text-muted)] mt-4">Only authorized accounts can access this app</p>
+		<p class="text-xs text-[var(--text-muted)] mt-2">
+			<a href="/privacy" class="underline hover:text-[var(--text-secondary)]">Privacy Policy</a>
+			&middot;
+			<a href="/terms" class="underline hover:text-[var(--text-secondary)]">Terms of Service</a>
+		</p>
 	</div>
 </div>
