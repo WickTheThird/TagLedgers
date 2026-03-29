@@ -452,8 +452,8 @@ async function handleDriveUpdate(fileId, request, env) {
 		return jsonResponse({ error: 'Failed to update file' }, 500, env);
 	}
 
-	const result = await res.json();
-	return jsonResponse({ id: result.id, name: result.name }, 200, env);
+	const updateResult = await res.json();
+	return withRefreshedToken(jsonResponse({ id: updateResult.id, name: updateResult.name }, 200, env), newToken);
 }
 
 // --- Main Router ---
