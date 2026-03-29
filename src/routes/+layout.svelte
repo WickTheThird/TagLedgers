@@ -111,4 +111,9 @@
 	{#if initialized}
 		{@render children()}
 	{/if}
+	<footer class="text-center text-xs text-[var(--text-muted)] py-3 border-t border-[var(--border)]">
+		<a href="/privacy" class="underline hover:text-[var(--text-secondary)]">Privacy Policy</a>
+		&middot;
+		<a href="/terms" class="underline hover:text-[var(--text-secondary)]">Terms of Service</a>
+	</footer>
 </div>
