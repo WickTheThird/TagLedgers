@@ -1,17 +1,19 @@
-import { getSession } from '$lib/server/session';
+import { getValidAccessToken } from '$lib/server/session';
 import { downloadDriveFile } from '$lib/server/google';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ cookies, params }) => {
-	const session = getSession(cookies);
-	if (!session) return new Response('Not authenticated', { status: 401 });
-
 	try {
-		const buffer = await downloadDriveFile(params.fileId);
+		const { token } = await getValidAccessToken(cookies);
+		const buffer = await downloadDriveFile(params.fileId, token);
 		return new Response(buffer, {
 			headers: { 'Content-Type': 'application/octet-stream' }
 		});
 	} catch (e) {
+		const msg = e instanceof Error ? e.message : 'Unknown error';
+		if (msg.includes('Not authenticated') || msg.includes('No refresh token')) {
+			return new Response('Not authenticated', { status: 401 });
+		}
 		console.error('Drive download error:', e);
 		return new Response('Failed to download file', { status: 500 });
 	}

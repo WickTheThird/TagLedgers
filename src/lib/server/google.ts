@@ -16,7 +16,7 @@ export function getAuthUrl() {
 		client_id: clientId,
 		redirect_uri: redirectUri,
 		response_type: 'code',
-		scope: 'openid email profile https://www.googleapis.com/auth/drive.file',
+		scope: 'openid email profile https://www.googleapis.com/auth/drive',
 		access_type: 'offline',
 		prompt: 'consent'
 	});
@@ -35,6 +35,22 @@ export async function exchangeCodeForTokens(code: string) {
 	});
 	if (!res.ok) throw new Error(`Token exchange failed: ${await res.text()}`);
 	return res.json() as Promise<{ access_token: string; refresh_token?: string; expires_in: number }>;
+}
+
+export async function refreshAccessToken(refreshToken: string): Promise<{ access_token: string; expires_in: number }> {
+	const { clientId, clientSecret } = getConfig();
+	const res = await fetch('https://oauth2.googleapis.com/token', {
+		method: 'POST',
+		headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+		body: new URLSearchParams({
+			refresh_token: refreshToken,
+			client_id: clientId,
+			client_secret: clientSecret,
+			grant_type: 'refresh_token'
+		})
+	});
+	if (!res.ok) throw new Error(`Token refresh failed: ${await res.text()}`);
+	return res.json() as Promise<{ access_token: string; expires_in: number }>;
 }
 
 export async function getUserInfo(accessToken: string) {
@@ -137,8 +153,8 @@ export function getDriveFolderIds(): string[] {
 	return ids.split(',').map(id => id.trim()).filter(Boolean);
 }
 
-export async function listDriveFiles() {
-	const token = await getServiceAccountToken();
+export async function listDriveFiles(userToken?: string) {
+	const token = userToken ?? await getServiceAccountToken();
 	const folderIds = getDriveFolderIds();
 
 	if (folderIds.length === 0) {
@@ -171,8 +187,8 @@ export async function listDriveFiles() {
 	return data.files ?? [];
 }
 
-export async function downloadDriveFile(fileId: string): Promise<ArrayBuffer> {
-	const token = await getServiceAccountToken();
+export async function downloadDriveFile(fileId: string, userToken?: string): Promise<ArrayBuffer> {
+	const token = userToken ?? await getServiceAccountToken();
 	const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
 		headers: { Authorization: `Bearer ${token}` }
 	});
