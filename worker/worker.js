@@ -3,6 +3,7 @@ const CORS_HEADERS = {
 	'Access-Control-Allow-Credentials': 'true',
 	'Access-Control-Allow-Methods': 'GET, POST, PUT, PATCH, OPTIONS',
 	'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+	'Access-Control-Expose-Headers': 'X-Refreshed-Token',
 };
 
 function corsHeaders(env) {
@@ -85,6 +86,54 @@ async function getServiceToken(env) {
 	}
 	cachedToken = { token: data.access_token, expiresAt: Date.now() + (data.expires_in - 60) * 1000 };
 	return cachedToken.token;
+}
+
+// --- Token Refresh ---
+async function refreshAccessToken(refreshToken, env) {
+	const res = await fetch('https://oauth2.googleapis.com/token', {
+		method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+		body: new URLSearchParams({
+			refresh_token: refreshToken, client_id: env.GOOGLE_CLIENT_ID,
+			client_secret: env.GOOGLE_CLIENT_SECRET, grant_type: 'refresh_token'
+		})
+	});
+	if (!res.ok) throw new Error(`Token refresh failed: ${await res.text()}`);
+	return res.json();
+}
+
+async function getValidSession(request, env) {
+	const cookie = getSessionToken(request);
+	if (!cookie) return null;
+	const session = await decryptSession(cookie, env.SESSION_SECRET);
+	if (!session) return null;
+
+	// Check if token is still valid (5 min buffer)
+	if (session.expiresAt > Date.now() + 5 * 60 * 1000) {
+		return { session, newToken: null };
+	}
+
+	// Token expired — try refresh
+	if (!session.refreshToken) return null;
+	try {
+		const newTokens = await refreshAccessToken(session.refreshToken, env);
+		const updatedSession = {
+			...session, accessToken: newTokens.access_token,
+			expiresAt: Date.now() + newTokens.expires_in * 1000
+		};
+		const newToken = await encryptSession(updatedSession, env.SESSION_SECRET);
+		return { session: updatedSession, newToken };
+	} catch (e) {
+		console.error('Token refresh failed:', e.message);
+		return null;
+	}
+}
+
+// Helper: add refreshed token to response if needed
+function withRefreshedToken(response, newToken) {
+	if (!newToken) return response;
+	const headers = new Headers(response.headers);
+	headers.set('X-Refreshed-Token', newToken);
+	return new Response(response.body, { status: response.status, headers });
 }
 
 // --- Route Handlers ---
@@ -174,10 +223,9 @@ async function handleAuthLogout(env) {
 }
 
 async function handleDriveFiles(request, env) {
-	const cookie = getSessionToken(request);
-	if (!cookie) return jsonResponse({ error: 'Not authenticated' }, 401, env);
-	const session = await decryptSession(cookie, env.SESSION_SECRET);
-	if (!session) return jsonResponse({ error: 'Not authenticated' }, 401, env);
+	const result = await getValidSession(request, env);
+	if (!result) return jsonResponse({ error: 'Not authenticated' }, 401, env);
+	const { session, newToken } = result;
 
 	const folderIds = (env.DRIVE_FOLDER_IDS || '').split(',').map(id => id.trim()).filter(Boolean);
 	const folderQuery = folderIds.map(id => `'${id}' in parents`).join(' or ');
@@ -188,30 +236,66 @@ async function handleDriveFiles(request, env) {
 		orderBy: 'modifiedTime desc', pageSize: '100', supportsAllDrives: 'true', includeItemsFromAllDrives: 'true'
 	});
 
-	// Use user's OAuth token for Drive (service account lacks Drive scope)
 	const res = await fetch(`https://www.googleapis.com/drive/v3/files?${params}`, {
 		headers: { Authorization: `Bearer ${session.accessToken}` }
 	});
 	if (!res.ok) {
 		const errBody = await res.text();
 		console.error('Drive files list failed:', res.status, errBody);
+		if (errBody.includes('insufficient authentication scopes')) {
+			return jsonResponse({ error: 'Please log out and log back in' }, 401, env);
+		}
 		return jsonResponse({ error: 'Failed to list files', detail: errBody }, 500, env);
 	}
 	const data = await res.json();
-	return jsonResponse({ files: data.files || [] }, 200, env);
+	const allFiles = data.files || [];
+
+	// Filter by ledger: only show files uploaded by the current user
+	const sheetId = env.DB_LEDGER_SHEET_ID;
+	if (sheetId) {
+		try {
+			const token = await getServiceToken(env);
+			const ledgerRes = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A:H`, {
+				headers: { Authorization: `Bearer ${token}` }
+			});
+			if (ledgerRes.ok) {
+				const ledgerData = await ledgerRes.json();
+				const rows = ledgerData.values || [];
+				const userFileIds = new Set();
+				for (const row of rows.slice(1)) {
+					if ((row[4] || '').toLowerCase() === session.email.toLowerCase()) {
+						userFileIds.add(row[1]);
+					}
+				}
+				const filtered = allFiles.filter(f => userFileIds.has(f.id));
+				return withRefreshedToken(jsonResponse({ files: filtered }, 200, env), newToken);
+			}
+		} catch (e) {
+			console.error('Ledger filter error:', e.message);
+		}
+	}
+
+	return withRefreshedToken(jsonResponse({ files: allFiles }, 200, env), newToken);
 }
 
 async function handleDriveDownload(fileId, request, env) {
-	const cookie = getSessionToken(request);
-	if (!cookie) return new Response('Not authenticated', { status: 401, headers: corsHeaders(env) });
-	const session = await decryptSession(cookie, env.SESSION_SECRET);
-	if (!session) return new Response('Not authenticated', { status: 401, headers: corsHeaders(env) });
+	const result = await getValidSession(request, env);
+	if (!result) return new Response('Not authenticated', { status: 401, headers: corsHeaders(env) });
+	const { session, newToken } = result;
 
 	const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`, {
 		headers: { Authorization: `Bearer ${session.accessToken}` }
 	});
+	if (!res.ok) {
+		const errBody = await res.text();
+		if (errBody.includes('insufficient authentication scopes')) {
+			return new Response('Please log out and log back in', { status: 401, headers: corsHeaders(env) });
+		}
+		return new Response('Failed to download file', { status: 500, headers: corsHeaders(env) });
+	}
 	const buffer = await res.arrayBuffer();
-	return new Response(buffer, { headers: { 'Content-Type': 'application/octet-stream', ...corsHeaders(env) } });
+	const response = new Response(buffer, { headers: { 'Content-Type': 'application/octet-stream', ...corsHeaders(env) } });
+	return withRefreshedToken(response, newToken);
 }
 
 async function handleDriveFolders(request, env) {
@@ -222,10 +306,9 @@ async function handleDriveFolders(request, env) {
 }
 
 async function handleDriveUpload(request, env) {
-	const cookie = getSessionToken(request);
-	if (!cookie) return jsonResponse({ error: 'Not authenticated' }, 401, env);
-	const session = await decryptSession(cookie, env.SESSION_SECRET);
-	if (!session) return jsonResponse({ error: 'Not authenticated' }, 401, env);
+	const result = await getValidSession(request, env);
+	if (!result) return jsonResponse({ error: 'Not authenticated' }, 401, env);
+	const { session, newToken } = result;
 
 	const formData = await request.formData();
 	const file = formData.get('file');
@@ -235,7 +318,6 @@ async function handleDriveUpload(request, env) {
 	const buffer = await file.arrayBuffer();
 	const mimeType = file.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
 
-	// Use user's OAuth token for upload (service accounts don't have storage quota)
 	const token = session.accessToken;
 	const initRes = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&supportsAllDrives=true', {
 		method: 'POST', headers: {
@@ -247,6 +329,9 @@ async function handleDriveUpload(request, env) {
 	if (!initRes.ok) {
 		const errBody = await initRes.text();
 		console.error('Drive upload init failed:', initRes.status, errBody);
+		if (errBody.includes('insufficient authentication scopes')) {
+			return jsonResponse({ error: 'Please log out and log back in' }, 401, env);
+		}
 		return jsonResponse({ error: 'Upload init failed', detail: errBody }, 500, env);
 	}
 	const uploadUrl = initRes.headers.get('Location');
@@ -260,15 +345,14 @@ async function handleDriveUpload(request, env) {
 		console.error('Drive upload failed:', uploadRes.status, errBody);
 		return jsonResponse({ error: 'Upload failed', detail: errBody }, 500, env);
 	}
-	const result = await uploadRes.json();
-	return jsonResponse({ id: result.id, name: result.name, webViewLink: `https://drive.google.com/file/d/${result.id}/view` }, 200, env);
+	const uploadResult = await uploadRes.json();
+	return withRefreshedToken(jsonResponse({ id: uploadResult.id, name: uploadResult.name, webViewLink: `https://drive.google.com/file/d/${uploadResult.id}/view` }, 200, env), newToken);
 }
 
 async function handleLedgerGet(request, env) {
-	const cookie = getSessionToken(request);
-	if (!cookie) return jsonResponse({ error: 'Not authenticated' }, 401, env);
-	const session = await decryptSession(cookie, env.SESSION_SECRET);
-	if (!session) return jsonResponse({ error: 'Not authenticated' }, 401, env);
+	const result = await getValidSession(request, env);
+	if (!result) return jsonResponse({ error: 'Not authenticated' }, 401, env);
+	const { session, newToken } = result;
 
 	const sheetId = env.DB_LEDGER_SHEET_ID;
 	if (!sheetId) return jsonResponse({ entries: [] }, 200, env);
@@ -289,14 +373,13 @@ async function handleLedgerGet(request, env) {
 	}));
 	// Each user only sees their own uploads
 	const entries = allEntries.filter(e => e.uploadedBy.toLowerCase() === session.email.toLowerCase());
-	return jsonResponse({ entries }, 200, env);
+	return withRefreshedToken(jsonResponse({ entries }, 200, env), newToken);
 }
 
 async function handleLedgerPost(request, env) {
-	const cookie = getSessionToken(request);
-	if (!cookie) return jsonResponse({ error: 'Not authenticated' }, 401, env);
-	const session = await decryptSession(cookie, env.SESSION_SECRET);
-	if (!session) return jsonResponse({ error: 'Not authenticated' }, 401, env);
+	const result = await getValidSession(request, env);
+	if (!result) return jsonResponse({ error: 'Not authenticated' }, 401, env);
+	const { session, newToken } = result;
 
 	const sheetId = env.DB_LEDGER_SHEET_ID;
 	if (!sheetId) return jsonResponse({ success: true }, 200, env);
@@ -341,10 +424,9 @@ async function handleLedgerPost(request, env) {
 
 // --- Update existing Drive file (replace content) ---
 async function handleDriveUpdate(fileId, request, env) {
-	const tokenStr = getSessionToken(request);
-	if (!tokenStr) return jsonResponse({ error: 'Not authenticated' }, 401, env);
-	const session = await decryptSession(tokenStr, env.SESSION_SECRET);
-	if (!session) return jsonResponse({ error: 'Not authenticated' }, 401, env);
+	const result = await getValidSession(request, env);
+	if (!result) return jsonResponse({ error: 'Not authenticated' }, 401, env);
+	const { session, newToken } = result;
 
 	const formData = await request.formData();
 	const file = formData.get('file');

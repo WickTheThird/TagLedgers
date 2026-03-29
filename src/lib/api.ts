@@ -27,7 +27,13 @@ export async function apiFetch(path: string, init?: RequestInit): Promise<Respon
 	if (token) {
 		headers['Authorization'] = `Bearer ${token}`;
 	}
-	const res = await fetch(apiUrl(path), { ...init, headers });
+	const res = await fetch(apiUrl(path), { ...init, headers, credentials: 'include' });
+
+	// If server refreshed the token, update localStorage
+	const refreshedToken = res.headers.get('X-Refreshed-Token');
+	if (refreshedToken) {
+		setSessionToken(refreshedToken);
+	}
 
 	// If server says unauthorized (token expired & refresh failed), redirect to login
 	if (res.status === 401 && typeof window !== 'undefined') {
