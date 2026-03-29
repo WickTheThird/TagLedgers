@@ -8,6 +8,7 @@ export interface Transaction {
 	balance: number | null;
 	currency: string;
 	type: 'Credit' | 'Debit';
+	txType: string; // original type from source (e.g., TOPUP, TRANSFER, FEE)
 	tag: string;
 	notes: string;
 	sourceSheet: string;

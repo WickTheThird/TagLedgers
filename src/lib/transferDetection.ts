@@ -62,23 +62,40 @@ function scoreDateCloseness(dateA: Date, dateB: Date): number {
 	return -1; // reject
 }
 
-function scoreDescription(descA: string, descB: string, accountA: string, accountB: string): number {
+const TRANSFER_TX_TYPES = new Set([
+	'TOPUP', 'TRANSFER', 'INTERNAL', 'WIRE', 'SEPA',
+	'BANK TRANSFER', 'STANDING ORDER'
+]);
+
+function scoreDescription(
+	descA: string, descB: string,
+	accountA: string, accountB: string,
+	txTypeA: string, txTypeB: string,
+	tagA: string, tagB: string
+): number {
 	let score = 0;
 	const maxScore = 15;
 
-	// Check if either description references the other account
+	// Transaction type signals (TOPUP, TRANSFER, etc.) — strongest metadata signal
+	if (TRANSFER_TX_TYPES.has(txTypeA.toUpperCase())) score += 5;
+	if (TRANSFER_TX_TYPES.has(txTypeB.toUpperCase())) score += 5;
+
+	// Tag signals (e.g., "Business transfer between accounts")
+	const transferTagPattern = /transfer|between\s*accounts/i;
+	if (transferTagPattern.test(tagA)) score += 3;
+	if (transferTagPattern.test(tagB)) score += 3;
+
+	// Account name cross-reference in description
 	const lowerA = (descA + ' ').toLowerCase();
 	const lowerB = (descB + ' ').toLowerCase();
 	const lowerAccA = accountA.toLowerCase();
 	const lowerAccB = accountB.toLowerCase();
+	if (lowerAccB.length > 2 && lowerA.includes(lowerAccB)) score += 4;
+	if (lowerAccA.length > 2 && lowerB.includes(lowerAccA)) score += 4;
 
-	// Account name cross-reference (strong signal)
-	if (lowerAccB.length > 2 && lowerA.includes(lowerAccB)) score += 6;
-	if (lowerAccA.length > 2 && lowerB.includes(lowerAccA)) score += 6;
-
-	// Transfer keywords in either description
-	if (hasTransferKeywords(descA)) score += 3;
-	if (hasTransferKeywords(descB)) score += 3;
+	// Transfer keywords in descriptions
+	if (hasTransferKeywords(descA)) score += 2;
+	if (hasTransferKeywords(descB)) score += 2;
 
 	// Token overlap
 	const tokensA = extractTokens(descA);
@@ -89,7 +106,7 @@ function scoreDescription(descA: string, descB: string, accountA: string, accoun
 			if (tokensB.has(t)) overlap++;
 		}
 		const overlapRatio = overlap / Math.max(tokensA.size, tokensB.size);
-		score += Math.round(overlapRatio * 4);
+		score += Math.round(overlapRatio * 3);
 	}
 
 	return Math.min(score, maxScore);
@@ -161,7 +178,9 @@ export function detectInterAccountTransfers(txs: Transaction[]): TransferMatch[]
 				const descScore = scoreDescription(
 					`${d.description} ${d.description2}`,
 					`${c.description} ${c.description2}`,
-					d.account, c.account
+					d.account, c.account,
+					d.txType, c.txType,
+					d.tag, c.tag
 				);
 
 				// Count this pair for frequency scoring

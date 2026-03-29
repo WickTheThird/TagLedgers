@@ -137,6 +137,7 @@ export function parseExcelBuffer(buffer: ArrayBuffer, fileName: string): Transac
 				balance,
 				currency: getStr('currency') || 'EUR',
 				type,
+				txType: txType.toUpperCase(),
 				tag: tag || 'UNTAGGED',
 				notes: getStr('notes'),
 				sourceSheet: sheetName,
